@@ -1,0 +1,316 @@
+pragma solidity 0.8.19;
+
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {InitializableAbstractStrategy, Helpers, IStrategyVault} from "../InitializableAbstractStrategy.sol";
+import {ILPool} from "./interfaces/ILPool.sol";
+import {ILPStaking} from "./interfaces/ILPStaking.sol";
+import {ILPToken} from "./interfaces/ILPToken.sol";
+import {ILPRewarder} from "./interfaces/ILPRewarder.sol";
+
+contract StargateStrategyV2 is InitializableAbstractStrategy {
+    using SafeERC20 for IERC20;
+
+    address public rewarder; // Address of the Stargate rewarder contract
+    address public farm; // Address of the Stargate staking contract (LPStaking)
+
+    // Events
+    event FarmUpdated(address newFarm);
+
+    // Custom errors
+    error InvalidLpToken(address lpToken);
+    error IncorrectPoolId(address asset, uint16 pid);
+    error IncorrectRewardPoolId(address asset, uint256 rewardPid);
+
+    function initialize(
+        address _rewarder,
+        address _vault,
+        address _eToken,
+        address _farm,
+        uint16 _depositSlippage, // 200 = 2%
+        uint16 _withdrawSlippage // 200 = 2%
+    ) external initializer {
+        Helpers._isNonZeroAddr(_rewarder);
+        Helpers._isNonZeroAddr(_eToken);
+        Helpers._isNonZeroAddr(_farm);
+        rewarder = _rewarder;
+        farm = _farm;
+
+        // register reward token
+        rewardTokenAddress.push(_eToken);
+
+        InitializableAbstractStrategy._initialize(_vault, _depositSlippage, _withdrawSlippage);
+    }
+
+    /// @notice Provide support for asset by passing its pToken address.
+    ///      This method can only be called by the system owner
+    /// @param _asset    Address for the asset
+    /// @param _lpToken   Address for the corresponding platform token
+    function setPTokenAddress(address _asset, address _lpToken) external onlyOwner {
+        if (!ILPStaking(farm).isPool(_lpToken)) {
+            revert InvalidLpToken(_lpToken);
+        }
+        address pool = ILPToken(_lpToken).stargate();
+
+        if (ILPool(pool).token() != _asset && ILPool(pool).lpToken() != _lpToken) {
+            revert InvalidAssetLpPair(_asset, _lpToken);
+        }
+        _setPTokenAddress(_asset, _lpToken);
+    }
+
+    /// @dev Remove a supported asset by passing its index.
+    ///       This method can only be called by the system owner
+    ///  @param _assetIndex Index of the asset to be removed
+    function removePToken(uint256 _assetIndex) external onlyOwner {
+        address asset = _removePTokenAddress(_assetIndex);
+    }
+
+    /// @inheritdoc InitializableAbstractStrategy
+    function deposit(address _asset, uint256 _amount) external override onlyVault nonReentrant {
+        Helpers._isNonZeroAmt(_amount);
+        if (!supportsCollateral(_asset)) revert CollateralNotSupported(_asset);
+        address lpToken = assetToPToken[_asset];
+        address pool = ILPToken(lpToken).stargate();
+        IERC20(_asset).forceApprove(pool, _amount);
+        ILPool(pool).deposit(msg.sender, _amount);
+
+        // Deposit the generated lpToken in the farm.
+        // @dev We are assuming that the 100% of lpToken is deposited in the farm and LPToken = Asset Price
+        uint256 depositAmt = IERC20(lpToken).balanceOf(msg.sender);
+        IERC20(lpToken).forceApprove(farm, _amount);
+        ILPStaking(farm).deposit(lpToken, _amount);
+        emit Deposit(_asset, depositAmt);
+    }
+
+    /// @inheritdoc InitializableAbstractStrategy
+    function withdraw(address _recipient, address _asset, uint256 _amount)
+        external
+        override
+        onlyVault
+        nonReentrant
+        returns (uint256)
+    {
+        return _withdraw(false, _recipient, _asset, _amount);
+    }
+
+    /// @inheritdoc InitializableAbstractStrategy
+    function withdrawToVault(address _asset, uint256 _amount)
+        external
+        override
+        onlyOwner
+        nonReentrant
+        returns (uint256)
+    {
+        return _withdraw(false, vault, _asset, _amount);
+    }
+
+    /// @notice Function to withdraw position from LPStaking
+    /// @dev Useful when there are not enough rewards in the pool
+    /// @param _asset Asset to withdraw
+    function emergencyWithdrawToVault(address _asset) external onlyOwner nonReentrant {
+        // uint256 lpTokenAmt = checkLPTokenBalance(_asset);
+        // AssetInfo storage asset = assetInfo[_asset];
+        // // Withdraw from LPStaking without caring for rewards
+        // ILPStaking(farm).emergencyWithdraw(asset.rewardPID);
+        // uint256 amtRecv = IStargateRouter(router).instantRedeemLocal(asset.pid, lpTokenAmt, vault)
+        //     * IStargatePool(assetToPToken[_asset]).convertRate();
+        // asset.allocatedAmt -= amtRecv;
+        // emit Withdrawal(_asset, amtRecv);
+    }
+
+    /// @inheritdoc InitializableAbstractStrategy
+    function collectInterest(address _asset) external override nonReentrant {
+        address yieldReceiver = IStrategyVault(vault).yieldReceiver();
+        uint256 earnedInterest = checkInterestEarned(_asset);
+        if (earnedInterest != 0) {
+            uint256 interestCollected = _withdraw(true, address(this), _asset, earnedInterest);
+            uint256 harvestAmt = _splitAndSendReward(_asset, yieldReceiver, msg.sender, interestCollected);
+            emit InterestCollected(_asset, yieldReceiver, harvestAmt);
+        }
+    }
+
+    /// @inheritdoc InitializableAbstractStrategy
+    function collectReward() external override nonReentrant {
+        // address yieldReceiver = IStrategyVault(vault).yieldReceiver();
+        // address rewardToken = rewardTokenAddress[0];
+        // uint256 numAssets = assetsMapped.length;
+        // for (uint256 i; i < numAssets;) {
+        //     address asset = assetsMapped[i];
+        //     uint256 rewardAmt = checkPendingRewards(asset);
+        //     if (rewardAmt != 0) {
+        //         ILPStaking(farm).deposit(assetInfo[asset].rewardPID, 0);
+        //     }
+        //     unchecked {
+        //         ++i;
+        //     }
+        // }
+        // uint256 rewardEarned = IERC20(rewardToken).balanceOf(address(this));
+        // uint256 harvestAmt = _splitAndSendReward(rewardToken, yieldReceiver, msg.sender, rewardEarned);
+        // emit RewardTokenCollected(rewardToken, yieldReceiver, harvestAmt);
+    }
+
+    /// @notice A function to withdraw from old farm, update farm and deposit in new farm
+    /// @param _newFarm Address of the new farm
+    /// @dev Only callable by owner
+    /// @dev @note Claim the rewards before calling this function!
+    function updateFarm(address _newFarm, address _rewardToken) external nonReentrant onlyOwner {
+        // Helpers._isNonZeroAddr(_rewardToken);
+        // Helpers._isNonZeroAddr(_newFarm);
+        // address _oldFarm = farm;
+        // uint256 _numAssets = assetsMapped.length;
+        // address _asset;
+        // uint256 _rewardPID;
+        // uint256 _lpTokenAmt;
+        // for (uint8 i; i < _numAssets;) {
+        //     _asset = assetsMapped[i];
+        //     _rewardPID = assetInfo[_asset].rewardPID;
+        //     _lpTokenAmt = checkLPTokenBalance(_asset);
+        //     ILPStaking(_oldFarm).withdraw(_rewardPID, _lpTokenAmt);
+        //     IERC20(assetToPToken[_asset]).forceApprove(_newFarm, _lpTokenAmt);
+        //     ILPStaking(_newFarm).deposit(_rewardPID, _lpTokenAmt);
+        //     unchecked {
+        //         ++i;
+        //     }
+        // }
+        // farm = _newFarm;
+        // rewardTokenAddress[0] = _rewardToken;
+        // emit FarmUpdated(_newFarm);
+    }
+
+    /// @inheritdoc InitializableAbstractStrategy
+    function checkRewardEarned() external view override returns (RewardData[] memory) {
+        // uint256 pendingRewards = 0;
+        // uint256 numAssets = assetsMapped.length;
+        // for (uint256 i; i < numAssets;) {
+        //     address asset = assetsMapped[i];
+        //     pendingRewards += ILPStaking(farm).pendingEmissionToken(assetInfo[asset].rewardPID, address(this));
+        //     unchecked {
+        //         ++i;
+        //     }
+        // }
+        // uint256 claimedRewards = IERC20(rewardTokenAddress[0]).balanceOf(address(this));
+        // RewardData[] memory rewardData = new RewardData[](1);
+        // rewardData[0] = RewardData(rewardTokenAddress[0], claimedRewards + pendingRewards);
+        // return rewardData;
+    }
+
+    /// @inheritdoc InitializableAbstractStrategy
+    function supportsCollateral(address _asset) public view override returns (bool) {
+        return assetToPToken[_asset] != address(0);
+    }
+
+    /// @notice Get the amount STG pending to be collected.
+    /// @param _asset Address for the asset
+    /// @return Amount of STG pending to be collected.
+    function checkPendingRewards(address _asset) public view returns (uint256) {
+        // if (!supportsCollateral(_asset)) revert CollateralNotSupported(_asset);
+        // return ILPStaking(farm).pendingEmissionToken(assetInfo[_asset].rewardPID, address(this));
+    }
+
+    /// @inheritdoc InitializableAbstractStrategy
+    function checkInterestEarned(address _asset) public view override returns (uint256) {
+        // uint256 lpTokenBal = checkLPTokenBalance(_asset);
+
+        // uint256 collateralBal = _convertToCollateral(_asset, lpTokenBal);
+        // uint256 allocatedAmt = assetInfo[_asset].allocatedAmt;
+        // if (collateralBal <= allocatedAmt) {
+        //     return 0;
+        // }
+        // return collateralBal - allocatedAmt;
+    }
+
+    /// @inheritdoc InitializableAbstractStrategy
+    function checkBalance(address _asset) public view override returns (uint256) {
+        // uint256 lpTokenBal = checkLPTokenBalance(_asset);
+        // uint256 calcCollateralBal = _convertToCollateral(_asset, lpTokenBal);
+        // uint256 allocatedAmt = assetInfo[_asset].allocatedAmt;
+        // if (allocatedAmt <= calcCollateralBal) {
+        //     return allocatedAmt;
+        // }
+        // return calcCollateralBal;
+    }
+
+    /// @inheritdoc InitializableAbstractStrategy
+    function checkAvailableBalance(address _asset) public view override returns (uint256) {
+        // IStargatePool pool = IStargatePool(assetToPToken[_asset]);
+        // uint256 availableFunds = _convertToCollateral(_asset, pool.deltaCredit());
+        // uint256 allocatedAmt = assetInfo[_asset].allocatedAmt;
+        // if (availableFunds <= allocatedAmt) {
+        //     return availableFunds;
+        // }
+        // return allocatedAmt;
+    }
+
+    /// @inheritdoc InitializableAbstractStrategy
+    function checkLPTokenBalance(address _asset) public view override returns (uint256) {
+        // if (!supportsCollateral(_asset)) revert CollateralNotSupported(_asset);
+        // (uint256 lpTokenStaked,) = ILPStaking(farm).userInfo(assetInfo[_asset].rewardPID, address(this));
+        // return lpTokenStaked;
+    }
+
+    /// @inheritdoc InitializableAbstractStrategy
+    /* solhint-disable no-empty-blocks */
+    function _abstractSetPToken(address _asset, address _pToken) internal override {}
+
+    /* solhint-enable no-empty-blocks */
+
+    /// @notice Convert amount of lpToken to collateral.
+    /// @param _asset Address for the asset
+    /// @param _lpTokenAmount Amount of lpToken
+    /// @return Amount of collateral equivalent to the lpToken amount
+    function _convertToCollateral(address _asset, uint256 _lpTokenAmount) internal view returns (uint256) {
+        // IStargatePool pool = IStargatePool(assetToPToken[_asset]);
+        // return ((_lpTokenAmount * pool.totalLiquidity()) / pool.totalSupply()) * pool.convertRate();
+    }
+
+    /// @notice Convert amount of collateral to lpToken.
+    /// @param _asset Address for the asset
+    /// @param _collateralAmount Amount of collateral
+    /// @return Amount of lpToken equivalent to the collateral amount
+    function _convertToPToken(address _asset, uint256 _collateralAmount) internal view returns (uint256) {
+        // IStargatePool pool = IStargatePool(assetToPToken[_asset]);
+        // return (_collateralAmount * pool.totalSupply()) / (pool.totalLiquidity() * pool.convertRate());
+    }
+
+    /// @notice Helper function for withdrawal.
+    /// @param _withdrawInterest Withdraws interest as well if this is set to `true`
+    /// @param _recipient Recipient of the amount
+    /// @param _asset Address of the asset token
+    /// @param _amount Amount to be withdrawn
+    /// @return Amount withdrawn
+    /// @dev Validate if the farm has enough STG to withdraw as rewards.
+    /// @dev It is designed to be called from functions with the `nonReentrant` modifier to ensure reentrancy protection.
+    function _withdraw(bool _withdrawInterest, address _recipient, address _asset, uint256 _amount)
+        private
+        returns (uint256)
+    {
+        // Helpers._isNonZeroAddr(_recipient);
+        // Helpers._isNonZeroAmt(_amount, "Must withdraw something");
+        // if (!supportsCollateral(_asset)) revert CollateralNotSupported(_asset);
+
+        // uint256 lpTokenAmt = _convertToPToken(_asset, _amount);
+        // AssetInfo storage asset = assetInfo[_asset];
+        // ILPStaking(farm).withdraw(asset.rewardPID, lpTokenAmt);
+        // uint256 minRecvAmt = (_amount * (Helpers.MAX_PERCENTAGE - withdrawSlippage)) / Helpers.MAX_PERCENTAGE;
+        // uint256 amtRecv = IStargateRouter(router).instantRedeemLocal(asset.pid, lpTokenAmt, _recipient)
+        //     * IStargatePool(assetToPToken[_asset]).convertRate();
+        // if (amtRecv < minRecvAmt) {
+        //     revert Helpers.MinSlippageError(amtRecv, minRecvAmt);
+        // }
+
+        // if (!_withdrawInterest) {
+        //     asset.allocatedAmt -= amtRecv;
+        //     emit Withdrawal(_asset, amtRecv);
+        // }
+
+        // return amtRecv;
+    }
+
+    /// @notice Validate if the farm has sufficient funds to claim rewards.
+    /// @param _asset Address for the asset
+    /// @return bool if the farm has sufficient funds to claim rewards.
+    /// @dev skipRwdValidation is a flag to skip the validation.
+    function _validateRwdClaim(address _asset) private view returns (bool) {
+        return checkPendingRewards(_asset) <= IERC20(rewardTokenAddress[0]).balanceOf(farm);
+    }
+}
