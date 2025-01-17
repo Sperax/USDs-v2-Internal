@@ -220,7 +220,6 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
     }
 
     /// @inheritdoc InitializableAbstractStrategy
-    // TODO Check the logic behind LP token withdrawal from the pool
     function checkAvailableBalance(address _asset) public view override returns (uint256) {
         address pool = assetInfo[_asset].poolAddress;
         uint256 availableFunds = ILPool(pool).redeemable(address(this));
