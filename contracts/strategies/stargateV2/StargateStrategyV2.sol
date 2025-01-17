@@ -222,13 +222,13 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
     /// @inheritdoc InitializableAbstractStrategy
     // TODO Check the logic behind LP token withdrawal from the pool
     function checkAvailableBalance(address _asset) public view override returns (uint256) {
-        // IStargatePool pool = IStargatePool(assetToPToken[_asset]);
-        // uint256 availableFunds = _convertToCollateral(_asset, pool.deltaCredit());
-        // uint256 allocatedAmt = assetInfo[_asset].allocatedAmt;
-        // if (availableFunds <= allocatedAmt) {
-        //     return availableFunds;
-        // }
-        // return allocatedAmt;
+        address pool = assetInfo[_asset].poolAddress;
+        uint256 availableFunds = ILPool(pool).redeemable(address(this));
+        uint256 allocatedAmt = assetInfo[_asset].allocatedAmt;
+        if (availableFunds <= allocatedAmt) {
+            return availableFunds;
+        }
+        return allocatedAmt;
     }
 
     /// @inheritdoc InitializableAbstractStrategy
