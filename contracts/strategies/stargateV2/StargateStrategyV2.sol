@@ -23,6 +23,15 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
     // Custom errors
     error InvalidLpToken(address lpToken);
 
+    /**
+     * @notice Initializes the StargateStrategyV2 contract with the given parameters.
+     * @dev This function is an initializer and can only be called once.
+     * @param _rewarder The address of the rewarder contract.
+     * @param _vault The address of the vault contract.
+     * @param _farm The address of the farm contract.
+     * @param _depositSlippage The slippage percentage for deposits (e.g., 200 = 2%).
+     * @param _withdrawSlippage The slippage percentage for withdrawals (e.g., 200 = 2%).
+     */
     function initialize(
         address _rewarder,
         address _vault,
@@ -49,12 +58,12 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
         }
 
         //* Change to abstract function
-        address pool = assetInfo[_asset].poolAddress;
+        address pool = ILPToken_V2(_lpToken).stargate();
         if (ILPool_V2(pool).token() != _asset && ILPool_V2(pool).lpToken() != _lpToken) {
             revert InvalidAssetLpPair(_asset, _lpToken);
         }
         // Save the pool address for the asset
-        assetInfo[_asset] = AssetInfo({allocatedAmt: 0, poolAddress: ILPToken_V2(_lpToken).stargate()});
+        assetInfo[_asset] = AssetInfo({allocatedAmt: 0, poolAddress: pool});
         _setPTokenAddress(_asset, _lpToken);
     }
 
@@ -75,7 +84,7 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
         if (!supportsCollateral(_asset)) revert CollateralNotSupported(_asset);
 
         AssetInfo storage asset = assetInfo[_asset];
-        address lpToken = assetToPToken[_asset];
+        address lpToken = _getPTokenFor(_asset);
         address pool = asset.poolAddress;
         IERC20(_asset).forceApprove(pool, _amount);
         ILPool_V2(pool).deposit(msg.sender, _amount);
@@ -114,10 +123,9 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
     /// @notice Function to withdraw position from LPStaking
     /// @dev Useful when there are not enough rewards in the pool
     /// @param _asset Asset to withdraw
-    //! There is an emergencyWithdraw function on staking contract but it sends the funds to the owner
     function emergencyWithdrawToVault(address _asset) external onlyOwner nonReentrant {
         uint256 lpTokenAmt = checkLPTokenBalance(_asset);
-        ILPStaking_V2(farm).emergencyWithdraw(assetToPToken[_asset]);
+        ILPStaking_V2(farm).emergencyWithdraw(_getPTokenFor(_asset));
 
         assetInfo[_asset].allocatedAmt -= lpTokenAmt;
 
@@ -141,17 +149,18 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
     function collectReward() external override nonReentrant {
         address yieldReceiver = IStrategyVault(vault).yieldReceiver();
         uint256 numAssets = assetsMapped.length;
+        uint256 rwdTokenLength = rewardTokenAddress.length;
         for (uint256 i; i < numAssets;) {
             address asset = assetsMapped[i];
             address[] memory pTokenAddress = new address[](1);
-            pTokenAddress[0] = assetToPToken[asset];
+            pTokenAddress[0] = _getPTokenFor(asset);
             (address[] memory rewardTokens, uint256[] memory pendingRewards) = checkPendingRewards(asset);
             rewardTokenAddress = rewardTokens;
             uint256 rewardAmt = pendingRewards[0];
             if (rewardAmt != 0) {
                 ILPStaking_V2(farm).claim(pTokenAddress);
             }
-            for (uint256 j; j < rewardTokens.length; j++) {
+            for (uint256 j; j < rwdTokenLength; j++) {
                 uint256 rewardEarned = IERC20(rewardTokens[j]).balanceOf(address(this));
                 if (rewardEarned != 0) {
                     uint256 harvestAmt = _splitAndSendReward(rewardTokens[j], yieldReceiver, msg.sender, rewardEarned);
@@ -170,19 +179,20 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
     // TODO update the logic with multiple reward tokens
 
     function checkRewardEarned() external view override returns (RewardData[] memory) {
-        // uint256 pendingRewards = 0;
-        // uint256 numAssets = assetsMapped.length;
-        // for (uint256 i; i < numAssets;) {
-        //     address asset = assetsMapped[i];
-        //     pendingRewards += ILPStaking(farm).pendingEmissionToken(assetInfo[asset].rewardPID, address(this));
-        //     unchecked {
-        //         ++i;
-        //     }
-        // }
-        // // uint256 claimedRewards = IERC20(rewardTokenAddress[0]).balanceOf(address(this));
-        // RewardData[] memory rewardData = new RewardData[](1);
-        // rewardData[0] = RewardData(rewardTokenAddress[0], claimedRewards + pendingRewards);
-        // return rewardData;
+        uint256 pendingRewards = 0;
+        uint256 numAssets = assetsMapped.length;
+        for (uint256 i; i < numAssets;) {
+            address asset = assetsMapped[i];
+            (, uint256[] memory rewardAmounts) = ILPRewarder_V2(rewarder).getRewards(asset, address(this));
+            pendingRewards += rewardAmounts[0];
+            unchecked {
+                ++i;
+            }
+        }
+        uint256 claimedRewards = IERC20(rewardTokenAddress[0]).balanceOf(address(this));
+        RewardData[] memory rewardData = new RewardData[](1);
+        rewardData[0] = RewardData(rewardTokenAddress[0], claimedRewards + pendingRewards);
+        return rewardData;
     }
 
     /// @inheritdoc InitializableAbstractStrategy
@@ -196,7 +206,7 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
     function checkPendingRewards(address _asset) public view returns (address[] memory, uint256[] memory) {
         if (!supportsCollateral(_asset)) revert CollateralNotSupported(_asset);
         (address[] memory rewardAddresses, uint256[] memory rewardAmounts) =
-            ILPRewarder_V2(rewarder).getRewards(assetToPToken[_asset], address(this));
+            ILPRewarder_V2(rewarder).getRewards(_getPTokenFor(_asset), address(this));
         return (rewardAddresses, rewardAmounts);
     }
 
@@ -241,6 +251,12 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
     /// @inheritdoc InitializableAbstractStrategy
     /* solhint-disable no-empty-blocks */
     function _abstractSetPToken(address _asset, address _pToken) internal override {}
+
+    function _getPTokenFor(address _asset) internal view returns (address) {
+        address lpToken = assetToPToken[_asset];
+        if (lpToken == address(0)) revert CollateralNotSupported(_asset);
+        return lpToken;
+    }
 
     /* solhint-enable no-empty-blocks */
 
