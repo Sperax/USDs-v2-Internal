@@ -36,6 +36,7 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
         address _rewarder,
         address _vault,
         address _farm,
+        address _eToken,
         uint16 _depositSlippage, // 200 = 2%
         uint16 _withdrawSlippage // 200 = 2%
     ) external initializer {
@@ -43,6 +44,8 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
         Helpers._isNonZeroAddr(_farm);
         rewarder = _rewarder;
         farm = _farm;
+        // register reward token
+        rewardTokenAddress.push(_eToken);
 
         InitializableAbstractStrategy._initialize(_vault, _depositSlippage, _withdrawSlippage);
     }
@@ -56,14 +59,8 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
         if (!ILPStaking_V2(farm).isPool(_lpToken)) {
             revert InvalidLpToken(_lpToken);
         }
-
-        //* Change to abstract function
-        address pool = ILPToken_V2(_lpToken).stargate();
-        if (ILPool_V2(pool).token() != _asset && ILPool_V2(pool).lpToken() != _lpToken) {
-            revert InvalidAssetLpPair(_asset, _lpToken);
-        }
         // Save the pool address for the asset
-        assetInfo[_asset] = AssetInfo({allocatedAmt: 0, poolAddress: pool});
+        assetInfo[_asset] = AssetInfo({allocatedAmt: 0, poolAddress: ILPToken_V2(_lpToken).stargate()});
         _setPTokenAddress(_asset, _lpToken);
     }
 
@@ -150,12 +147,12 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
         address yieldReceiver = IStrategyVault(vault).yieldReceiver();
         uint256 numAssets = assetsMapped.length;
         uint256 rwdTokenLength = rewardTokenAddress.length;
+
         for (uint256 i; i < numAssets;) {
             address asset = assetsMapped[i];
             address[] memory pTokenAddress = new address[](1);
             pTokenAddress[0] = _getPTokenFor(asset);
             (address[] memory rewardTokens, uint256[] memory pendingRewards) = checkPendingRewards(asset);
-            rewardTokenAddress = rewardTokens;
             uint256 rewardAmt = pendingRewards[0];
             if (rewardAmt != 0) {
                 ILPStaking_V2(farm).claim(pTokenAddress);
@@ -250,7 +247,12 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
 
     /// @inheritdoc InitializableAbstractStrategy
     /* solhint-disable no-empty-blocks */
-    function _abstractSetPToken(address _asset, address _pToken) internal override {}
+    function _abstractSetPToken(address _asset, address _pToken) internal view override {
+        address pool = ILPToken_V2(_pToken).stargate();
+        if (ILPool_V2(pool).token() != _asset && ILPool_V2(pool).lpToken() != _pToken) {
+            revert InvalidAssetLpPair(_asset, _pToken);
+        }
+    }
 
     function _getPTokenFor(address _asset) internal view returns (address) {
         address lpToken = assetToPToken[_asset];
