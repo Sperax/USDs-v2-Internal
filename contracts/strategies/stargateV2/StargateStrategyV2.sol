@@ -3,10 +3,10 @@ pragma solidity 0.8.19;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {InitializableAbstractStrategy, Helpers, IStrategyVault} from "../InitializableAbstractStrategy.sol";
-import {ILPool} from "./interfaces/ILPool.sol";
-import {ILPStaking} from "./interfaces/ILPStaking.sol";
-import {ILPToken} from "./interfaces/ILPToken.sol";
-import {ILPRewarder} from "./interfaces/ILPRewarder.sol";
+import {ILPool_V2} from "./interfaces/ILPool_V2.sol";
+import {ILPStaking_V2} from "./interfaces/ILPStaking_V2.sol";
+import {ILPToken_V2} from "./interfaces/ILPToken_V2.sol";
+import {ILPRewarder_V2} from "./interfaces/ILPRewarder_V2.sol";
 
 contract StargateStrategyV2 is InitializableAbstractStrategy {
     using SafeERC20 for IERC20;
@@ -44,16 +44,17 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
     /// @param _lpToken   Address for the corresponding platform token
 
     function setPTokenAddress(address _asset, address _lpToken) external onlyOwner {
-        if (!ILPStaking(farm).isPool(_lpToken)) {
+        if (!ILPStaking_V2(farm).isPool(_lpToken)) {
             revert InvalidLpToken(_lpToken);
         }
-        // Save the pool address for the asset
-        assetInfo[_asset] = AssetInfo({allocatedAmt: 0, poolAddress: ILPToken(_lpToken).stargate()});
 
+        //* Change to abstract function
         address pool = assetInfo[_asset].poolAddress;
-        if (ILPool(pool).token() != _asset && ILPool(pool).lpToken() != _lpToken) {
+        if (ILPool_V2(pool).token() != _asset && ILPool_V2(pool).lpToken() != _lpToken) {
             revert InvalidAssetLpPair(_asset, _lpToken);
         }
+        // Save the pool address for the asset
+        assetInfo[_asset] = AssetInfo({allocatedAmt: 0, poolAddress: ILPToken_V2(_lpToken).stargate()});
         _setPTokenAddress(_asset, _lpToken);
     }
 
@@ -77,19 +78,14 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
         address lpToken = assetToPToken[_asset];
         address pool = asset.poolAddress;
         IERC20(_asset).forceApprove(pool, _amount);
-        ILPool(pool).deposit(msg.sender, _amount);
-
-        // Checking the slippage
-        uint256 minDepositAmt = (_amount * (Helpers.MAX_PERCENTAGE - depositSlippage)) / Helpers.MAX_PERCENTAGE;
-        if (_amount < minDepositAmt) {
-            revert Helpers.MinSlippageError(_amount, minDepositAmt);
-        }
+        ILPool_V2(pool).deposit(msg.sender, _amount);
+        //*check redeemable function need to check it with LPToken Balance and allocatedAmt
         // Update the allocated amount in the strategy
         asset.allocatedAmt += _amount;
         // Deposit the generated lpToken in the farm.
         // @dev We are assuming that the 100% of lpToken is deposited in the farm and LPToken = Asset Price
         IERC20(lpToken).forceApprove(farm, _amount);
-        ILPStaking(farm).deposit(lpToken, _amount);
+        ILPStaking_V2(farm).deposit(lpToken, _amount);
         emit Deposit(_asset, _amount);
     }
 
@@ -121,8 +117,12 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
     //! There is an emergencyWithdraw function on staking contract but it sends the funds to the owner
     function emergencyWithdrawToVault(address _asset) external onlyOwner nonReentrant {
         uint256 lpTokenAmt = checkLPTokenBalance(_asset);
-        ILPStaking(farm).emergencyWithdraw(assetToPToken[_asset]);
+        ILPStaking_V2(farm).emergencyWithdraw(assetToPToken[_asset]);
+
         assetInfo[_asset].allocatedAmt -= lpTokenAmt;
+
+        ILPool_V2(assetInfo[_asset].poolAddress).redeem(lpTokenAmt, vault);
+
         emit Withdrawal(_asset, lpTokenAmt);
     }
 
@@ -143,11 +143,13 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
         uint256 numAssets = assetsMapped.length;
         for (uint256 i; i < numAssets;) {
             address asset = assetsMapped[i];
+            address[] memory pTokenAddress = new address[](1);
+            pTokenAddress[0] = assetToPToken[asset];
             (address[] memory rewardTokens, uint256[] memory pendingRewards) = checkPendingRewards(asset);
             rewardTokenAddress = rewardTokens;
             uint256 rewardAmt = pendingRewards[0];
             if (rewardAmt != 0) {
-                ILPStaking(farm).claim(assetToPToken[asset]);
+                ILPStaking_V2(farm).claim(pTokenAddress);
             }
             for (uint256 j; j < rewardTokens.length; j++) {
                 uint256 rewardEarned = IERC20(rewardTokens[j]).balanceOf(address(this));
@@ -194,12 +196,11 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
     function checkPendingRewards(address _asset) public view returns (address[] memory, uint256[] memory) {
         if (!supportsCollateral(_asset)) revert CollateralNotSupported(_asset);
         (address[] memory rewardAddresses, uint256[] memory rewardAmounts) =
-            ILPRewarder(rewarder).getRewards(assetToPToken[_asset], address(this));
+            ILPRewarder_V2(rewarder).getRewards(assetToPToken[_asset], address(this));
         return (rewardAddresses, rewardAmounts);
     }
 
     /// @inheritdoc InitializableAbstractStrategy
-    //TODO  @dev lpTokenBal = Asset balance since it's 1:1
     function checkInterestEarned(address _asset) public view override returns (uint256) {
         uint256 lpTokenBal = checkLPTokenBalance(_asset);
         uint256 allocatedAmt = assetInfo[_asset].allocatedAmt;
@@ -222,7 +223,7 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
     /// @inheritdoc InitializableAbstractStrategy
     function checkAvailableBalance(address _asset) public view override returns (uint256) {
         address pool = assetInfo[_asset].poolAddress;
-        uint256 availableFunds = ILPool(pool).redeemable(address(this));
+        uint256 availableFunds = ILPool_V2(pool).redeemable(address(this));
         uint256 allocatedAmt = assetInfo[_asset].allocatedAmt;
         if (availableFunds <= allocatedAmt) {
             return availableFunds;
@@ -233,7 +234,7 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
     /// @inheritdoc InitializableAbstractStrategy
     function checkLPTokenBalance(address _asset) public view override returns (uint256) {
         if (!supportsCollateral(_asset)) revert CollateralNotSupported(_asset);
-        uint256 lpTokenStaked = ILPStaking(farm).balanceOf(assetToPToken[_asset], address(this));
+        uint256 lpTokenStaked = ILPStaking_V2(farm).balanceOf(assetToPToken[_asset], address(this));
         return lpTokenStaked;
     }
 
@@ -261,18 +262,19 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
 
         AssetInfo storage asset = assetInfo[_asset];
         address lpToken = assetToPToken[_asset];
-        ILPStaking(farm).withdraw(lpToken, _amount);
+        ILPStaking_V2(farm).withdraw(lpToken, _amount);
+
+        uint256 lpTokenBurned = ILPool_V2(asset.poolAddress).redeem(_amount, _recipient);
 
         uint256 minRecvAmt = (_amount * (Helpers.MAX_PERCENTAGE - withdrawSlippage)) / Helpers.MAX_PERCENTAGE;
-        if (_amount < minRecvAmt) {
-            revert Helpers.MinSlippageError(_amount, minRecvAmt);
+        if (lpTokenBurned < minRecvAmt) {
+            revert Helpers.MinSlippageError(lpTokenBurned, minRecvAmt);
         }
-        ILPool(asset.poolAddress).redeem(_amount, _recipient);
         if (!_withdrawInterest) {
             asset.allocatedAmt -= _amount;
-            emit Withdrawal(_asset, _amount);
+            emit Withdrawal(_asset, lpTokenBurned);
         }
 
-        return _amount;
+        return lpTokenBurned;
     }
 }
