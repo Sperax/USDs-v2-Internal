@@ -54,7 +54,6 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
     ///      This method can only be called by the system owner
     /// @param _asset    Address for the asset
     /// @param _lpToken   Address for the corresponding platform token
-
     function setPTokenAddress(address _asset, address _lpToken) external onlyOwner {
         if (!ILPStaking_V2(farm).isPool(_lpToken)) {
             revert InvalidLpToken(_lpToken);
