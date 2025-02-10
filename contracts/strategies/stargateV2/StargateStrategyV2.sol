@@ -59,8 +59,8 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
             revert InvalidLpToken(_lpToken);
         }
         // Save the pool address for the asset
-        assetInfo[_asset] = AssetInfo({allocatedAmt: 0, poolAddress: ILPToken_V2(_lpToken).stargate()});
         _setPTokenAddress(_asset, _lpToken);
+        assetInfo[_asset] = AssetInfo({allocatedAmt: 0, poolAddress: ILPToken_V2(_lpToken).stargate()});
     }
 
     /// @dev Remove a supported asset by passing its index.
@@ -79,14 +79,14 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
         Helpers._isNonZeroAmt(_amount);
         if (!supportsCollateral(_asset)) revert CollateralNotSupported(_asset);
 
-        AssetInfo storage asset = assetInfo[_asset];
+        AssetInfo storage assetPointer = assetInfo[_asset];
         address lpToken = _getPTokenFor(_asset);
-        address pool = asset.poolAddress;
+        address pool = assetPointer.poolAddress;
         IERC20(_asset).forceApprove(pool, _amount);
         ILPool_V2(pool).deposit(msg.sender, _amount);
         //*check redeemable function need to check it with LPToken Balance and allocatedAmt
         // Update the allocated amount in the strategy
-        asset.allocatedAmt += _amount;
+        assetPointer.allocatedAmt += _amount;
         // Deposit the generated lpToken in the farm.
         // @dev We are assuming that the 100% of lpToken is deposited in the farm and LPToken = Asset Price
         IERC20(lpToken).forceApprove(farm, _amount);
@@ -156,7 +156,7 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
             if (rewardAmt != 0) {
                 ILPStaking_V2(farm).claim(pTokenAddress);
             }
-            for (uint256 j; j < rwdTokenLength; j++) {
+            for (uint256 j; j < rwdTokenLength;) {
                 uint256 rewardEarned = IERC20(rewardTokens[j]).balanceOf(address(this));
                 if (rewardEarned != 0) {
                     uint256 harvestAmt = _splitAndSendReward(rewardTokens[j], yieldReceiver, msg.sender, rewardEarned);
