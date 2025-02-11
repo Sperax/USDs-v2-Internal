@@ -3,6 +3,7 @@ from brownie import (
     VaultCore,
     AaveStrategy,
     StargateStrategy,
+    StargateStrategyV2,
     CompoundStrategy,
     USDs,
 )
@@ -130,6 +131,47 @@ deployment_config = {
                         "lpToken": "0xaa4BF442F024820B2C28Cd0FD72b82c63e66F56C",
                         "pid": 7,
                         "rewardPid": 3
+                    },
+                    transact=True,
+                ),
+                Step(
+                    func="transferOwnership",
+                    args={"new_admin": USDS_OWNER_ADDR},
+                    transact=True,
+                )
+                
+            ]
+            
+        )
+    ),
+        "stargateStrategyV2": Deployment_data(
+        # @note https://stargateprotocol.gitbook.io/stargate/developers/contract-addresses/mainnet#arbitrum
+        contract=StargateStrategyV2,
+        config=Deployment_config(
+            upgradeable=True,
+            proxy_admin=PROXY_ADMIN,
+            deployment_params={
+                'rewarder': '0x957b12606690C7692eF92bb5c34a0E63baED99C7',
+                'vault': VAULT,
+                'farm': '0x3da4f8E456AC648c489c286B99Ca37B666be7C4C',
+                'eToken': '0x6694340fc020c5E6B96567843da2df01b2CE1eb6',
+                'depositSlippage': 50,
+                'withdrawSlippage': 50
+            },
+            post_deployment_steps=[
+                Step(
+                    func="setPTokenAddress",
+                    args={
+                        "asset": USDC,
+                        "lpToken": "0x6Ea313859A5D9F6fF2a68f529e6361174bFD2225"
+                    },
+                    transact=True,
+                ),
+                Step(
+                    func="setPTokenAddress",
+                    args={
+                        "asset": USDT,
+                        "lpToken": "0x8D66Ff1845b1baCC6E87D867CA4680d05A349cA8"
                     },
                     transact=True,
                 ),
