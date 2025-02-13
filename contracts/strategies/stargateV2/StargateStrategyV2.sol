@@ -78,13 +78,11 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
     function deposit(address _asset, uint256 _amount) external override onlyVault nonReentrant {
         Helpers._isNonZeroAmt(_amount);
         if (!supportsCollateral(_asset)) revert CollateralNotSupported(_asset);
-
         AssetInfo storage assetPointer = assetInfo[_asset];
         address lpToken = _getPTokenFor(_asset);
         address pool = assetPointer.poolAddress;
         IERC20(_asset).forceApprove(pool, _amount);
         ILPool_V2(pool).deposit(msg.sender, _amount);
-        //*check redeemable function need to check it with LPToken Balance and allocatedAmt
         // Update the allocated amount in the strategy
         assetPointer.allocatedAmt += _amount;
         // Deposit the generated lpToken in the farm.
@@ -175,19 +173,32 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
     // TODO update the logic with multiple reward tokens
 
     function checkRewardEarned() external view override returns (RewardData[] memory) {
-        uint256 pendingRewards = 0;
         uint256 numAssets = assetsMapped.length;
-        for (uint256 i; i < numAssets;) {
-            address asset = assetsMapped[i];
-            (, uint256[] memory rewardAmounts) = ILPRewarder_V2(rewarder).getRewards(asset, address(this));
-            pendingRewards += rewardAmounts[0];
+        uint256 rwdTokenLength = rewardTokenAddress.length;
+        RewardData[] memory rewardData = new RewardData[](rwdTokenLength);
+
+        for (uint256 j; j < rwdTokenLength;) {
+            uint256 pendingRewards = 0;
+            for (uint256 i; i < numAssets;) {
+                address asset = assetsMapped[i];
+                (address[] memory rewardTokens, uint256[] memory rewardAmounts) =
+                    ILPRewarder_V2(rewarder).getRewards(_getPTokenFor(asset), address(this));
+                for (uint256 k; k < rewardTokens.length; ++k) {
+                    if (rewardTokens[k] == rewardTokenAddress[j]) {
+                        pendingRewards += rewardAmounts[k];
+                        break;
+                    }
+                }
+                unchecked {
+                    ++i;
+                }
+            }
+            uint256 claimedRewards = IERC20(rewardTokenAddress[j]).balanceOf(address(this));
+            rewardData[j] = RewardData(rewardTokenAddress[j], claimedRewards + pendingRewards);
             unchecked {
-                ++i;
+                ++j;
             }
         }
-        uint256 claimedRewards = IERC20(rewardTokenAddress[0]).balanceOf(address(this));
-        RewardData[] memory rewardData = new RewardData[](1);
-        rewardData[0] = RewardData(rewardTokenAddress[0], claimedRewards + pendingRewards);
         return rewardData;
     }
 
