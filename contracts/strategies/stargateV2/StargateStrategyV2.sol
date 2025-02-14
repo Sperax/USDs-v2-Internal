@@ -11,6 +11,9 @@ import {ILPRewarder_V2} from "./interfaces/ILPRewarder_V2.sol";
 /// @author Sperax Foundation.
 /// @notice A yield earning strategy for USDs protocol.
 
+/// @title Stargate Strategy V2  for USDs protocol.
+/// @author Sperax Foundation.
+/// @notice A yield earning strategy for USDs protocol.
 contract StargateStrategyV2 is InitializableAbstractStrategy {
     using SafeERC20 for IERC20;
 
