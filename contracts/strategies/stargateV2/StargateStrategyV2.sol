@@ -71,7 +71,7 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
     ///  @param _assetIndex Index of the asset to be removed
     function removePToken(uint256 _assetIndex) external onlyOwner {
         address asset = _removePTokenAddress(_assetIndex);
-        AssetInfo memory assetPointer = assetInfo[asset];
+        AssetInfo storage assetPointer = assetInfo[asset];
         if (assetPointer.allocatedAmt != 0) {
             revert CollateralAllocated(asset);
         }
