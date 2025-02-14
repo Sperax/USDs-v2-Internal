@@ -7,9 +7,6 @@ import {ILPool_V2} from "./interfaces/ILPool_V2.sol";
 import {ILPStaking_V2} from "./interfaces/ILPStaking_V2.sol";
 import {ILPToken_V2} from "./interfaces/ILPToken_V2.sol";
 import {ILPRewarder_V2} from "./interfaces/ILPRewarder_V2.sol";
-/// @title Stargate Strategy V2  for USDs protocol.
-/// @author Sperax Foundation.
-/// @notice A yield earning strategy for USDs protocol.
 
 /// @title Stargate Strategy V2  for USDs protocol.
 /// @author Sperax Foundation.
