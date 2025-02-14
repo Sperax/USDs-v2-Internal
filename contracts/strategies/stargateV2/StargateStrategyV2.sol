@@ -23,6 +23,9 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
     address public farm; // Address of the Stargate staking contract (LPStaking)
     mapping(address => AssetInfo) public assetInfo;
 
+    // Custom Events
+    event rewardTokensUpdated(address[] rewardTokens);
+
     // Custom errors
     error InvalidLpToken(address lpToken);
 
@@ -71,11 +74,25 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
     ///  @param _assetIndex Index of the asset to be removed
     function removePToken(uint256 _assetIndex) external onlyOwner {
         address asset = _removePTokenAddress(_assetIndex);
-        AssetInfo storage assetPointer = assetInfo[asset];
-        if (assetPointer.allocatedAmt != 0) {
+        if (assetInfo[asset].allocatedAmt != 0) {
             revert CollateralAllocated(asset);
         }
-        delete assetPointer;
+        delete  assetInfo[asset];
+    }
+    /// @notice Updates the reward token addresses from the rewarder contract.
+    /// @dev This function can only be called by the owner.
+
+    function updateRewardTokenAddresses() external onlyOwner {
+        address[] memory newRewardTokens = ILPRewarder_V2(rewarder).rewardTokens();
+        delete rewardTokenAddress;
+        uint256 rwdTokenLength = newRewardTokens.length;
+        for (uint256 i; i < rwdTokenLength;) {
+            rewardTokenAddress.push(newRewardTokens[i]);
+            unchecked {
+                ++i;
+            }
+        }
+        emit rewardTokensUpdated(rewardTokenAddress);
     }
 
     /// @inheritdoc InitializableAbstractStrategy
@@ -123,7 +140,7 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
     /// @param _asset Asset to withdraw
     function emergencyWithdrawToVault(address _asset) external onlyOwner nonReentrant {
         ILPStaking_V2(farm).emergencyWithdraw(_getPTokenFor(_asset));
-        
+
         uint256 lpTokenAmt = checkLPTokenBalance(_asset);
         AssetInfo storage assetPointer = assetInfo[_asset];
 
@@ -152,13 +169,11 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
 
         for (uint256 i; i < numAssets;) {
             address asset = assetsMapped[i];
-            (address[] memory rewardTokens, uint256[] memory pendingRewards) = checkPendingRewards(asset);
-            uint256 rewardAmt = pendingRewards[0];
-            if (rewardAmt != 0) {
-                address[] memory pTokenAddress = new address[](1);
-                pTokenAddress[0] = _getPTokenFor(asset);
-                ILPStaking_V2(farm).claim(pTokenAddress);
-            }
+            (address[] memory rewardTokens,) = checkPendingRewards(asset);
+            address[] memory pTokenAddress = new address[](1);
+            pTokenAddress[0] = _getPTokenFor(asset);
+            ILPStaking_V2(farm).claim(pTokenAddress);
+
             for (uint256 j; j < rwdTokenLength;) {
                 uint256 rewardEarned = IERC20(rewardTokens[j]).balanceOf(address(this));
                 if (rewardEarned != 0) {
