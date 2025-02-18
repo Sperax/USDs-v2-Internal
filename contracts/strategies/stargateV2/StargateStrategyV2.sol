@@ -265,7 +265,7 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
 
     /// @inheritdoc InitializableAbstractStrategy
     function checkLPTokenBalance(address _asset) public view override returns (uint256) {
-        if (!supportsCollateral(_asset)) revert CollateralNotSupported(_asset);
+        _getPTokenFor(_asset);
         return ILPStaking_V2(farm).balanceOf(assetToPToken[_asset], address(this));
     }
 
@@ -276,13 +276,13 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
             revert InvalidAssetLpPair(_asset, _pToken);
         }
     }
+
     /**
      * @dev Retrieves the pToken address associated with a given asset.
      * @param _asset The address of the asset for which to get the pToken.
      * @return The address of the pToken associated with the given asset.
      * @notice Reverts with `CollateralNotSupported` if the asset is not supported.
      */
-
     function _getPTokenFor(address _asset) internal view returns (address) {
         address lpToken = assetToPToken[_asset];
         if (lpToken == address(0)) revert CollateralNotSupported(_asset);
