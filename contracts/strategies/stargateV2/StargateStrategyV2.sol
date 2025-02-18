@@ -310,7 +310,7 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
         if (amtRecv < minRecvAmt) {
             revert Helpers.MinSlippageError(amtRecv, minRecvAmt);
         }
-        if (!_isWithdrawInterest) {
+        if (_isWithdrawInterest) {
             return amtRecv;
         }
         assetPointer.allocatedAmt -= _amount;
