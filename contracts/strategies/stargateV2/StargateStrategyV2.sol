@@ -29,16 +29,14 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
     // Custom errors
     error InvalidLpToken(address lpToken);
 
-    /**
-     * @notice Initializes the StargateStrategyV2 contract with the given parameters.
-     * @dev This function is an initializer and can only be called once.
-     * @param _rewarder The address of the rewarder contract.
-     * @param _vault The address of the vault contract.
-     * @param _farm The address of the farm contract.
-     * @param _eToken The address of the reward token.
-     * @param _depositSlippage The slippage percentage for deposits (e.g., 200 = 2%).
-     * @param _withdrawSlippage The slippage percentage for withdrawals (e.g., 200 = 2%).
-     */
+    /// @notice Initializes the StargateStrategyV2 contract with the given parameters.
+    /// @dev This function is an initializer and can only be called once.
+    /// @param _rewarder The address of the rewarder contract.
+    /// @param _vault The address of the vault contract.
+    /// @param _farm The address of the farm contract.
+    /// @param _eToken The address of the reward token.
+    /// @param _depositSlippage The slippage percentage for deposits (e.g., 200 = 2%).
+    /// @param _withdrawSlippage The slippage percentage for withdrawals (e.g., 200 = 2%).
     function initialize(
         address _rewarder,
         address _vault,
