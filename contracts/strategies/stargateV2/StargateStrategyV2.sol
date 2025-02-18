@@ -24,7 +24,7 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
     mapping(address => AssetInfo) public assetInfo;
 
     // Custom Events
-    event rewardTokensUpdated(address[] rewardTokens);
+    event RewardTokensUpdated(address[] rewardTokens);
 
     // Custom errors
     error InvalidLpToken(address lpToken);
@@ -85,7 +85,7 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
         address[] memory newRewardTokens = ILPRewarder_V2(rewarder).rewardTokens();
         rewardTokenAddress = newRewardTokens;
 
-        emit rewardTokensUpdated(newRewardTokens);
+        emit RewardTokensUpdated(newRewardTokens);
     }
 
     /// @inheritdoc InitializableAbstractStrategy
