@@ -186,7 +186,6 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
     }
 
     /// @inheritdoc InitializableAbstractStrategy
-
     function checkRewardEarned() external view override returns (RewardData[] memory) {
         uint256 numAssets = assetsMapped.length;
         uint256 rwdTokenLength = rewardTokenAddress.length;
