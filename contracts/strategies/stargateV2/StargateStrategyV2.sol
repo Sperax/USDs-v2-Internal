@@ -262,6 +262,7 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
         }
         return allocatedAmt;
     }
+
     /// @inheritdoc InitializableAbstractStrategy
 
     function checkLPTokenBalance(address _asset) public view override returns (uint256) {
