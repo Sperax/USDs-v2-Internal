@@ -276,6 +276,12 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
             revert InvalidAssetLpPair(_asset, _pToken);
         }
     }
+    /**
+     * @dev Retrieves the pToken address associated with a given asset.
+     * @param _asset The address of the asset for which to get the pToken.
+     * @return The address of the pToken associated with the given asset.
+     * @notice Reverts with `CollateralNotSupported` if the asset is not supported.
+     */
 
     function _getPTokenFor(address _asset) internal view returns (address) {
         address lpToken = assetToPToken[_asset];
