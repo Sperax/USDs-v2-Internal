@@ -35,6 +35,7 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
      * @param _rewarder The address of the rewarder contract.
      * @param _vault The address of the vault contract.
      * @param _farm The address of the farm contract.
+     * @param _eToken The address of the reward token.
      * @param _depositSlippage The slippage percentage for deposits (e.g., 200 = 2%).
      * @param _withdrawSlippage The slippage percentage for withdrawals (e.g., 200 = 2%).
      */
@@ -79,9 +80,9 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
         }
         delete  assetInfo[asset];
     }
+
     /// @notice Updates the reward token addresses from the rewarder contract.
     /// @dev This function can only be called by the owner.
-
     function updateRewardTokenAddresses() external onlyOwner {
         address[] memory newRewardTokens = ILPRewarder_V2(rewarder).rewardTokens();
         delete rewardTokenAddress;
