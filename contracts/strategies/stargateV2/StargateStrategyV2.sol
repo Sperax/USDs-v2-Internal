@@ -184,6 +184,7 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
             }
         }
     }
+
     /// @inheritdoc InitializableAbstractStrategy
 
     function checkRewardEarned() external view override returns (RewardData[] memory) {
