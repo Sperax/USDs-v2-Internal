@@ -264,7 +264,6 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
     }
 
     /// @inheritdoc InitializableAbstractStrategy
-
     function checkLPTokenBalance(address _asset) public view override returns (uint256) {
         if (!supportsCollateral(_asset)) revert CollateralNotSupported(_asset);
         return ILPStaking_V2(farm).balanceOf(assetToPToken[_asset], address(this));
