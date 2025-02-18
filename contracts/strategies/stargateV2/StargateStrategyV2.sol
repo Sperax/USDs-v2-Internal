@@ -85,15 +85,9 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
     /// @dev This function can only be called by the owner.
     function updateRewardTokenAddresses() external onlyOwner {
         address[] memory newRewardTokens = ILPRewarder_V2(rewarder).rewardTokens();
-        delete rewardTokenAddress;
-        uint256 rwdTokenLength = newRewardTokens.length;
-        for (uint256 i; i < rwdTokenLength;) {
-            rewardTokenAddress.push(newRewardTokens[i]);
-            unchecked {
-                ++i;
-            }
-        }
-        emit rewardTokensUpdated(rewardTokenAddress);
+        rewardTokenAddress = newRewardTokens;
+
+        emit rewardTokensUpdated(newRewardTokens);
     }
 
     /// @inheritdoc InitializableAbstractStrategy
