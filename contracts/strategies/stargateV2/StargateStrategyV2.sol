@@ -47,6 +47,7 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
     ) external initializer {
         Helpers._isNonZeroAddr(_rewarder);
         Helpers._isNonZeroAddr(_farm);
+        Helpers._isNonZeroAddr(_eToken);
         rewarder = _rewarder;
         farm = _farm;
         // register reward token
