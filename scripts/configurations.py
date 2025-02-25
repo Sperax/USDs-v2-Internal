@@ -144,7 +144,7 @@ deployment_config = {
             
         )
     ),
-        "stargateStrategyV2": Deployment_data(
+    "stargateStrategyV2": Deployment_data(
         # @note https://stargateprotocol.gitbook.io/stargate/developers/contract-addresses/mainnet#arbitrum
         contract=StargateStrategyV2,
         config=Deployment_config(
@@ -154,7 +154,6 @@ deployment_config = {
                 'rewarder': '0x957b12606690C7692eF92bb5c34a0E63baED99C7',
                 'vault': VAULT,
                 'farm': '0x3da4f8E456AC648c489c286B99Ca37B666be7C4C',
-                'eToken': '0x6694340fc020c5E6B96567843da2df01b2CE1eb6',
                 'depositSlippage': 50,
                 'withdrawSlippage': 50
             },

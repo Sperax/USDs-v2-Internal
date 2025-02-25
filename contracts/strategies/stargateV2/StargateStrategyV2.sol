@@ -23,9 +23,6 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
     address public farm; // Address of the Stargate staking contract (LPStaking)
     mapping(address => AssetInfo) public assetInfo;
 
-    // Custom Events
-    event RewardTokensUpdated(address[] rewardTokens);
-
     // Custom errors
     error InvalidLpToken(address lpToken);
 
@@ -34,24 +31,19 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
     /// @param _rewarder The address of the rewarder contract.
     /// @param _vault The address of the vault contract.
     /// @param _farm The address of the farm contract.
-    /// @param _eToken The address of the reward token.
     /// @param _depositSlippage The slippage percentage for deposits (e.g., 200 = 2%).
     /// @param _withdrawSlippage The slippage percentage for withdrawals (e.g., 200 = 2%).
     function initialize(
         address _rewarder,
         address _vault,
         address _farm,
-        address _eToken,
         uint16 _depositSlippage, // 200 = 2%
         uint16 _withdrawSlippage // 200 = 2%
     ) external initializer {
         Helpers._isNonZeroAddr(_rewarder);
         Helpers._isNonZeroAddr(_farm);
-        Helpers._isNonZeroAddr(_eToken);
         rewarder = _rewarder;
         farm = _farm;
-        // register reward token
-        rewardTokenAddress.push(_eToken);
 
         InitializableAbstractStrategy._initialize(_vault, _depositSlippage, _withdrawSlippage);
     }
@@ -78,15 +70,6 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
             revert CollateralAllocated(asset);
         }
         delete  assetInfo[asset];
-    }
-
-    /// @notice Updates the reward token addresses from the rewarder contract.
-    /// @dev This function can only be called by the owner.
-    function updateRewardTokenAddresses() external onlyOwner {
-        address[] memory newRewardTokens = ILPRewarder_V2(rewarder).rewardTokens();
-        rewardTokenAddress = newRewardTokens;
-
-        emit RewardTokensUpdated(newRewardTokens);
     }
 
     /// @inheritdoc InitializableAbstractStrategy
@@ -159,7 +142,7 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
     function collectReward() external override nonReentrant {
         address yieldReceiver = IStrategyVault(vault).yieldReceiver();
         uint256 numAssets = assetsMapped.length;
-        uint256 rwdTokenLength = rewardTokenAddress.length;
+        address[] memory rewardTokens = ILPRewarder_V2(rewarder).rewardTokens();
 
         for (uint256 i; i < numAssets;) {
             address asset = assetsMapped[i];
@@ -171,11 +154,11 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
             }
         }
 
-        for (uint256 j; j < rwdTokenLength;) {
-            uint256 rewardEarned = IERC20(rewardTokenAddress[j]).balanceOf(address(this));
+        for (uint256 j; j < rewardTokens.length;) {
+            uint256 rewardEarned = IERC20(rewardTokens[j]).balanceOf(address(this));
             if (rewardEarned != 0) {
-                uint256 harvestAmt = _splitAndSendReward(rewardTokenAddress[j], yieldReceiver, msg.sender, rewardEarned);
-                emit RewardTokenCollected(rewardTokenAddress[j], yieldReceiver, harvestAmt);
+                uint256 harvestAmt = _splitAndSendReward(rewardTokens[j], yieldReceiver, msg.sender, rewardEarned);
+                emit RewardTokenCollected(rewardTokens[j], yieldReceiver, harvestAmt);
             }
             unchecked {
                 ++j;
@@ -186,17 +169,17 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
     /// @inheritdoc InitializableAbstractStrategy
     function checkRewardEarned() external view override returns (RewardData[] memory) {
         uint256 numAssets = assetsMapped.length;
-        RewardData[] memory rewardData = new RewardData[](rewardTokenAddress.length);
+        address[] memory rewardTokens = ILPRewarder_V2(rewarder).rewardTokens();
+        RewardData[] memory rewardData = new RewardData[](rewardTokens.length);
 
         for (uint256 i; i < numAssets;) {
             address asset = assetsMapped[i];
-            (address[] memory rewardTokens, uint256[] memory rewardAmounts) =
+            (, uint256[] memory rewardAmounts) =
                 ILPRewarder_V2(rewarder).getRewards(_getPTokenFor(asset), address(this));
 
             for (uint256 j; j < rewardTokens.length;) {
-                rewardData[j] = RewardData(
-                    rewardTokenAddress[j], IERC20(rewardTokenAddress[j]).balanceOf(address(this)) + rewardAmounts[j]
-                );
+                rewardData[j] =
+                    RewardData(rewardTokens[j], IERC20(rewardTokens[j]).balanceOf(address(this)) + rewardAmounts[j]);
                 unchecked {
                     ++j;
                 }
