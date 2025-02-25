@@ -186,24 +186,17 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
     /// @inheritdoc InitializableAbstractStrategy
     function checkRewardEarned() external view override returns (RewardData[] memory) {
         uint256 numAssets = assetsMapped.length;
-        uint256 rwdTokenLength = rewardTokenAddress.length;
-        RewardData[] memory rewardData = new RewardData[](rwdTokenLength);
+        RewardData[] memory rewardData = new RewardData[](rewardTokenAddress.length);
 
         for (uint256 i; i < numAssets;) {
             address asset = assetsMapped[i];
             (address[] memory rewardTokens, uint256[] memory rewardAmounts) =
                 ILPRewarder_V2(rewarder).getRewards(_getPTokenFor(asset), address(this));
 
-            for (uint256 j; j < rwdTokenLength;) {
-                uint256 pendingRewards = 0;
-                for (uint256 k; k < rewardTokens.length; ++k) {
-                    if (rewardTokens[k] == rewardTokenAddress[j]) {
-                        pendingRewards += rewardAmounts[k];
-                        break;
-                    }
-                }
-                uint256 claimedRewards = IERC20(rewardTokenAddress[j]).balanceOf(address(this));
-                rewardData[j] = RewardData(rewardTokenAddress[j], claimedRewards + pendingRewards);
+            for (uint256 j; j < rewardTokens.length;) {
+                rewardData[j] = RewardData(
+                    rewardTokenAddress[j], IERC20(rewardTokenAddress[j]).balanceOf(address(this)) + rewardAmounts[j]
+                );
                 unchecked {
                     ++j;
                 }
