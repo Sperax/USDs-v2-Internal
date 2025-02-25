@@ -163,23 +163,22 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
 
         for (uint256 i; i < numAssets;) {
             address asset = assetsMapped[i];
-            (address[] memory rewardTokens,) = checkPendingRewards(asset);
             address[] memory pTokenAddress = new address[](1);
             pTokenAddress[0] = _getPTokenFor(asset);
             ILPStaking_V2(farm).claim(pTokenAddress);
-
-            for (uint256 j; j < rwdTokenLength;) {
-                uint256 rewardEarned = IERC20(rewardTokens[j]).balanceOf(address(this));
-                if (rewardEarned != 0) {
-                    uint256 harvestAmt = _splitAndSendReward(rewardTokens[j], yieldReceiver, msg.sender, rewardEarned);
-                    emit RewardTokenCollected(rewardTokens[j], yieldReceiver, harvestAmt);
-                }
-                unchecked {
-                    ++j;
-                }
-            }
             unchecked {
                 ++i;
+            }
+        }
+
+        for (uint256 j; j < rwdTokenLength;) {
+            uint256 rewardEarned = IERC20(rewardTokenAddress[j]).balanceOf(address(this));
+            if (rewardEarned != 0) {
+                uint256 harvestAmt = _splitAndSendReward(rewardTokenAddress[j], yieldReceiver, msg.sender, rewardEarned);
+                emit RewardTokenCollected(rewardTokenAddress[j], yieldReceiver, harvestAmt);
+            }
+            unchecked {
+                ++j;
             }
         }
     }
@@ -190,26 +189,27 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
         uint256 rwdTokenLength = rewardTokenAddress.length;
         RewardData[] memory rewardData = new RewardData[](rwdTokenLength);
 
-        for (uint256 j; j < rwdTokenLength;) {
-            uint256 pendingRewards = 0;
-            for (uint256 i; i < numAssets;) {
-                address asset = assetsMapped[i];
-                (address[] memory rewardTokens, uint256[] memory rewardAmounts) =
-                    ILPRewarder_V2(rewarder).getRewards(_getPTokenFor(asset), address(this));
+        for (uint256 i; i < numAssets;) {
+            address asset = assetsMapped[i];
+            (address[] memory rewardTokens, uint256[] memory rewardAmounts) =
+                ILPRewarder_V2(rewarder).getRewards(_getPTokenFor(asset), address(this));
+
+            for (uint256 j; j < rwdTokenLength;) {
+                uint256 pendingRewards = 0;
                 for (uint256 k; k < rewardTokens.length; ++k) {
                     if (rewardTokens[k] == rewardTokenAddress[j]) {
                         pendingRewards += rewardAmounts[k];
                         break;
                     }
                 }
+                uint256 claimedRewards = IERC20(rewardTokenAddress[j]).balanceOf(address(this));
+                rewardData[j] = RewardData(rewardTokenAddress[j], claimedRewards + pendingRewards);
                 unchecked {
-                    ++i;
+                    ++j;
                 }
             }
-            uint256 claimedRewards = IERC20(rewardTokenAddress[j]).balanceOf(address(this));
-            rewardData[j] = RewardData(rewardTokenAddress[j], claimedRewards + pendingRewards);
             unchecked {
-                ++j;
+                ++i;
             }
         }
         return rewardData;
