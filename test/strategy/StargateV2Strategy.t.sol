@@ -16,16 +16,14 @@ contract StargateStrategyV2Test is BaseStrategy, BaseTest {
         string name;
         address asset;
         address pToken;
-        uint16 pid;
-        uint256 rewardPid;
     }
 
     AssetData[] public assetData;
 
     // Strategy configuration:
-    address public constant STARGATE_REWARDER = 0x53Bf833A5d6c4ddA888F69c22C88C9f356a41614;
+    address public constant STARGATE_REWARDER = 0x957b12606690C7692eF92bb5c34a0E63baED99C7;
     address public constant E_TOKEN = 0x6694340fc020c5E6B96567843da2df01b2CE1eb6;
-    address public constant STARGATE_FARM = 0x9774558534036Ff2E236331546691b4eB70594b1;
+    address public constant STARGATE_FARM = 0x3da4f8E456AC648c489c286B99Ca37B666be7C4C;
     uint16 public constant BASE_DEPOSIT_SLIPPAGE = 20;
     uint16 public constant BASE_WITHDRAW_SLIPPAGE = 20;
 
@@ -35,12 +33,12 @@ contract StargateStrategyV2Test is BaseStrategy, BaseTest {
     StargateStrategyV2 internal strategy;
     address internal proxyAddress;
 
-    event FarmUpdated(address _newFarm);
+    // event FarmUpdated(address _newFarm);
 
-    // Test errors
-    error IncorrectPoolId(address asset, uint16 pid);
-    error IncorrectRewardPoolId(address asset, uint256 rewardPid);
-    error InsufficientRewardFundInFarm();
+    // // Test errors
+    // error IncorrectPoolId(address asset, uint16 pid);
+    // error IncorrectRewardPoolId(address asset, uint256 rewardPid);
+    // error InsufficientRewardFundInFarm();
 
     function setUp() public virtual override {
         super.setUp();
@@ -98,21 +96,17 @@ contract StargateStrategyV2Test is BaseStrategy, BaseTest {
     function _configAsset() internal {
         assetData.push(
             AssetData({
-                name: "USDC.e",
-                asset: 0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8,
-                pToken: 0x892785f33CdeE22A30AEF750F285E18c18040c3e,
-                pid: 1,
-                rewardPid: 0
+                name: "USDT",
+                asset: 0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9,
+                pToken: 0xcE8CcA271Ebc0533920C83d39F417ED6A0abB7D0
             })
         );
 
         assetData.push(
             AssetData({
-                name: "FRAX",
-                asset: 0x17FC002b466eEc40DaE837Fc4bE5c67993ddBd6F,
-                pToken: 0xaa4BF442F024820B2C28Cd0FD72b82c63e66F56C,
-                pid: 7,
-                rewardPid: 3
+                name: "USDC",
+                asset: 0xaf88d065e77c8cC2239327C5EDb3A432268e5831,
+                pToken: 0xe8CDF27AcD73a434D661C84887215F7598e7d0d3
             })
         );
     }
