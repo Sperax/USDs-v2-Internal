@@ -6,7 +6,7 @@ import {BaseTest} from "../utils/BaseTest.sol";
 import {UpgradeUtil} from "../utils/UpgradeUtil.sol";
 import {stdStorage, StdStorage} from "forge-std/StdStorage.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import {StargateStrategyV2} from "../../contracts/strategies/stargateV2/StargateStrategyV2.sol";
+import {StargateStrategyV2, ILPToken_V2, Helpers} from "../../contracts/strategies/stargateV2/StargateStrategyV2.sol";
 import {VmSafe} from "forge-std/Vm.sol";
 
 address constant DUMMY_ADDRESS = 0x6B175474E89094C44Da98b954EedeAC495271d0F;
@@ -15,7 +15,7 @@ contract StargateStrategyV2Test is BaseStrategy, BaseTest {
     struct AssetData {
         string name;
         address asset;
-        address pToken;
+        address pool;
     }
 
     AssetData[] public assetData;
@@ -62,7 +62,7 @@ contract StargateStrategyV2Test is BaseStrategy, BaseTest {
 
     function _setAssetData() internal {
         for (uint8 i = 0; i < assetData.length; ++i) {
-            strategy.setPTokenAddress(assetData[i].asset, assetData[i].pToken);
+            strategy.setPTokenAddress(assetData[i].asset, assetData[i].pool);
         }
     }
 
@@ -98,7 +98,7 @@ contract StargateStrategyV2Test is BaseStrategy, BaseTest {
             AssetData({
                 name: "USDT",
                 asset: 0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9,
-                pToken: 0xcE8CcA271Ebc0533920C83d39F417ED6A0abB7D0
+                pool: 0x8D66Ff1845b1baCC6E87D867CA4680d05A349cA8
             })
         );
 
@@ -106,14 +106,14 @@ contract StargateStrategyV2Test is BaseStrategy, BaseTest {
             AssetData({
                 name: "USDC",
                 asset: 0xaf88d065e77c8cC2239327C5EDb3A432268e5831,
-                pToken: 0xe8CDF27AcD73a434D661C84887215F7598e7d0d3
+                pool: 0x6Ea313859A5D9F6fF2a68f529e6361174bFD2225
             })
         );
     }
 }
 
 contract Test_Initialization is StargateStrategyV2Test {
-    function test_ValidInitialization() public {
+    function test_ValidInitialization() public useKnownActor(USDS_OWNER) {
         // Test state variables pre initialization
         assertEq(impl.owner(), address(0));
         assertEq(strategy.owner(), address(0));
@@ -122,23 +122,135 @@ contract Test_Initialization is StargateStrategyV2Test {
         _initializeStrategy();
 
         // Test state variables post initialization
-        assertEq(impl.owner(), address(0));
-        assertEq(strategy.owner(), USDS_OWNER);
-        assertEq(strategy.vault(), VAULT);
-        assertEq(strategy.rewarder(), STARGATE_REWARDER);
-        assertEq(strategy.farm(), STARGATE_FARM);
-        assertEq(strategy.depositSlippage(), BASE_DEPOSIT_SLIPPAGE);
-        assertEq(strategy.withdrawSlippage(), BASE_WITHDRAW_SLIPPAGE);
-        // assertEq(strategy.rewardTokenAddress(0), E_TOKEN); TODO: uncomment after the bug is fixed
+        assertEq(impl.owner(), address(0), "Implementation has a valid owner");
+        assertEq(strategy.owner(), USDS_OWNER, "Owner is not set correctly");
+        assertEq(strategy.vault(), VAULT, "Vault not correct");
+        assertEq(strategy.rewarder(), STARGATE_REWARDER, "Rewarder not correct");
+        assertEq(strategy.farm(), STARGATE_FARM, "Farm not correct");
+        assertEq(strategy.depositSlippage(), BASE_DEPOSIT_SLIPPAGE, "Deposit slippage not correct");
+        assertEq(strategy.withdrawSlippage(), BASE_WITHDRAW_SLIPPAGE, "Withdraw slippage not correct");
+    }
+
+    function test_InvalidInitialization() public useKnownActor(USDS_OWNER) {
+        vm.expectRevert(abi.encodeWithSelector(Helpers.InvalidAddress.selector));
+        strategy.initialize(address(0), address(0), STARGATE_FARM, BASE_DEPOSIT_SLIPPAGE, BASE_WITHDRAW_SLIPPAGE);
     }
 
     function test_UpdateVaultCore() public useKnownActor(USDS_OWNER) {
         _initializeStrategy();
+
         address newVault = address(1);
         vm.expectEmit(address(strategy));
         emit VaultUpdated(newVault);
         strategy.updateVault(newVault);
     }
-    //updateHarvestIncentiveRate
-    //recoverERC20
+
+    function test_UpdateHarvestIncentiveRate() public useKnownActor(USDS_OWNER) {
+        uint16 newRate = 100;
+        _initializeStrategy();
+
+        vm.expectEmit(address(strategy));
+        emit HarvestIncentiveRateUpdated(newRate);
+        strategy.updateHarvestIncentiveRate(newRate);
+
+        newRate = 10001;
+        vm.expectRevert(abi.encodeWithSelector(Helpers.GTMaxPercentage.selector, newRate));
+        strategy.updateHarvestIncentiveRate(newRate);
+    }
+}
+
+contract Test_SetPToken is StargateStrategyV2Test {
+    function setUp() public override {
+        super.setUp();
+        vm.startPrank(USDS_OWNER);
+        _initializeStrategy();
+        vm.stopPrank();
+    }
+
+    function test_SetPTokenAddress() public useKnownActor(USDS_OWNER) {
+        for (uint8 i = 0; i < assetData.length; ++i) {
+            assertEq(strategy.assetToPToken(assetData[i].asset), address(0));
+            assertFalse(strategy.supportsCollateral(assetData[i].asset));
+
+            vm.expectEmit(address(strategy));
+            emit PTokenAdded(assetData[i].asset, assetData[i].pool);
+            strategy.setPTokenAddress(assetData[i].asset, assetData[i].pool);
+
+            assertEq(strategy.assetToPToken(assetData[i].asset), assetData[i].pool);
+            assertTrue(strategy.supportsCollateral(assetData[i].asset));
+            (uint256 allocatedAmt, address poolAddress) = strategy.assetInfo(assetData[i].asset);
+            assertEq(allocatedAmt, 0);
+            assertEq(poolAddress, ILPToken_V2(assetData[i].pool).stargate());
+        }
+    }
+
+    function test_RevertWhen_NotOwner() public {
+        AssetData memory data = assetData[0];
+
+        vm.expectRevert("Ownable: caller is not the owner");
+        strategy.setPTokenAddress(data.asset, data.pool);
+    }
+
+    function test_RevertWhen_InvalidLpToken() public useKnownActor(USDS_OWNER) {
+        AssetData memory data = assetData[0];
+        data.pool = actors[3];
+
+        vm.expectRevert(abi.encodeWithSelector(StargateStrategyV2.InvalidLpToken.selector, data.pool));
+        strategy.setPTokenAddress(data.asset, data.pool);
+    }
+
+    function test_RevertWhen_InvalidAssetLpPair() public useKnownActor(USDS_OWNER) {
+        AssetData memory data = assetData[0];
+        data.pool = assetData[1].pool;
+
+        vm.expectRevert(abi.encodeWithSelector(InvalidAssetLpPair.selector, data.asset, data.pool));
+        strategy.setPTokenAddress(data.asset, data.pool);
+    }
+
+    function test_RevertWhen_DuplicateAsset() public useKnownActor(USDS_OWNER) {
+        AssetData memory data = assetData[0];
+        strategy.setPTokenAddress(data.asset, data.pool);
+
+        vm.expectRevert(abi.encodeWithSelector(PTokenAlreadySet.selector, data.asset, data.pool));
+        strategy.setPTokenAddress(data.asset, data.pool);
+    }
+}
+
+contract Test_RemovePToken is StargateStrategyV2Test {
+    using stdStorage for StdStorage;
+
+    function setUp() public override {
+        super.setUp();
+        vm.startPrank(USDS_OWNER);
+        _initializeStrategy();
+        _setAssetData();
+        vm.stopPrank();
+    }
+
+    function test_RemovePToken() public useKnownActor(USDS_OWNER) {
+        AssetData memory data = assetData[0];
+        assertTrue(strategy.supportsCollateral(data.asset));
+        vm.expectEmit(address(strategy));
+        emit PTokenRemoved(data.asset, data.pool);
+        strategy.removePToken(0);
+        assertFalse(strategy.supportsCollateral(data.asset));
+    }
+
+    function test_RevertWhen_NotOwner() public {
+        vm.expectRevert("Ownable: caller is not the owner");
+        strategy.removePToken(0);
+    }
+
+    function test_RevertWhen_CollateralAllocated() public useKnownActor(USDS_OWNER) {
+        AssetData memory data = assetData[0];
+
+        // Mock asset allocation!
+        stdstore.target(address(strategy)).sig("assetInfo(address)").with_key(data.asset).depth(0).checked_write(1e18);
+
+        (uint256 allocatedAmt,) = strategy.assetInfo(data.asset);
+
+        assert(allocatedAmt > 0);
+        vm.expectRevert(abi.encodeWithSelector(CollateralAllocated.selector, data.asset));
+        strategy.removePToken(0);
+    }
 }
