@@ -171,16 +171,20 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
         uint256 numAssets = assetsMapped.length;
         address[] memory rewardTokens = ILPRewarder_V2(rewarder).rewardTokens();
         RewardData[] memory rewardData = new RewardData[](rewardTokens.length);
+        uint256 rwdTokendLength = rewardTokens.length;
+        for (uint256 i; i < rwdTokendLength;) {
+            rewardData[i] = RewardData(rewardTokens[i], IERC20(rewardTokens[i]).balanceOf(address(this)));
+            unchecked {
+                ++i;
+            }
+        }
 
         for (uint256 i; i < numAssets;) {
             address asset = assetsMapped[i];
             (, uint256[] memory rewardAmounts) =
                 ILPRewarder_V2(rewarder).getRewards(_getPTokenFor(asset), address(this));
 
-            for (uint256 j; j < rewardTokens.length;) {
-                if (i == 0) {
-                    rewardData[j] = RewardData(rewardTokens[j], IERC20(rewardTokens[j]).balanceOf(address(this)));
-                }
+            for (uint256 j; j < rwdTokendLength;) {
                 rewardData[j].amount = rewardData[j].amount + rewardAmounts[j];
                 unchecked {
                     ++j;
