@@ -75,10 +75,10 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
     /// @inheritdoc InitializableAbstractStrategy
     function deposit(address _asset, uint256 _amount) external override onlyVault nonReentrant {
         Helpers._isNonZeroAmt(_amount);
-        if (!supportsCollateral(_asset)) revert CollateralNotSupported(_asset);
         AssetInfo storage assetPointer = assetInfo[_asset];
         address lpToken = _getPTokenFor(_asset);
         address pool = assetPointer.poolAddress;
+        IERC20(_asset).safeTransferFrom(msg.sender, address(this), _amount);
         IERC20(_asset).forceApprove(pool, _amount);
         ILPool_V2(pool).deposit(address(this), _amount);
         // Update the allocated amount in the strategy
