@@ -69,7 +69,7 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
         if (assetInfo[asset].allocatedAmt != 0) {
             revert CollateralAllocated(asset);
         }
-        delete  assetInfo[asset];
+        delete assetInfo[asset];
     }
 
     /// @inheritdoc InitializableAbstractStrategy
@@ -246,7 +246,7 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
     /// @inheritdoc InitializableAbstractStrategy
     function _abstractSetPToken(address _asset, address _pToken) internal view override {
         address pool = ILPToken_V2(_pToken).stargate();
-        if (ILPool_V2(pool).token() != _asset && ILPool_V2(pool).lpToken() != _pToken) {
+        if (ILPool_V2(pool).token() != _asset || ILPool_V2(pool).lpToken() != _pToken) {
             revert InvalidAssetLpPair(_asset, _pToken);
         }
     }
