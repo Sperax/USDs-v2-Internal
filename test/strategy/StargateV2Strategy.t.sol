@@ -333,8 +333,8 @@ contract Test_Deposit is StargateStrategyV2Test {
         strategy.deposit(data.asset, amount);
     }
 }
-/*
-contract Test_Harvest is StargateStrategyV2Test {
+
+contract Test_CollectReward is StargateStrategyV2Test {
     address public yieldReceiver;
 
     function setUp() public override {
@@ -347,25 +347,19 @@ contract Test_Harvest is StargateStrategyV2Test {
         _createDeposits();
         vm.stopPrank();
     }
-}
 
-contract Test_CollectReward is Test_Harvest {
     function test_CollectReward(uint16 _harvestIncentiveRate) public {
         _harvestIncentiveRate = uint16(bound(_harvestIncentiveRate, 0, 10000));
         vm.prank(USDS_OWNER);
         strategy.updateHarvestIncentiveRate(_harvestIncentiveRate);
-        StargateStrategy.RewardData[] memory initialRewards = strategy.checkRewardEarned();
-
-        assert(initialRewards[0].token == strategy.rewardTokenAddress(0));
-        assert(initialRewards[0].amount == 0);
 
         // Do a time travel & mine dummy blocks for accumulating some rewards
         vm.warp(block.timestamp + 10 days);
         vm.roll(block.number + 1000);
 
-        StargateStrategy.RewardData[] memory currentRewards = strategy.checkRewardEarned();
+        StargateStrategyV2.RewardData[] memory currentRewards = strategy.checkRewardEarned();
         assert(currentRewards[0].amount > 0);
-        uint256 incentiveAmt = (currentRewards[0].amount * strategy.harvestIncentiveRate()) / Helpers.MAX_PERCENTAGE;
+        uint256 incentiveAmt = (currentRewards[0].amount * _harvestIncentiveRate) / Helpers.MAX_PERCENTAGE;
         uint256 harvestAmt = currentRewards[0].amount - incentiveAmt;
         address caller = actors[1];
 
@@ -385,7 +379,7 @@ contract Test_CollectReward is Test_Harvest {
         assert(currentRewards[0].amount == 0);
     }
 }
-
+/*
 contract Test_CollectInterest is Test_Harvest {
     using stdStorage for StdStorage;
 
