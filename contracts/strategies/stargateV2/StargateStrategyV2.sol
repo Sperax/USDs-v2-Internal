@@ -118,7 +118,8 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
     function emergencyWithdrawToVault(address _asset) external onlyOwner nonReentrant {
         ILPStaking_V2(farm).emergencyWithdraw(_getPTokenFor(_asset));
 
-        uint256 lpTokenAmt = checkLPTokenBalance(_asset);
+        address lpToken = _getPTokenFor(_asset);
+        uint256 lpTokenAmt = IERC20(lpToken).balanceOf(address(this));
         AssetInfo storage assetPointer = assetInfo[_asset];
 
         ILPool_V2(assetPointer.poolAddress).redeem(lpTokenAmt, vault);
