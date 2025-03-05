@@ -23,6 +23,9 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
     address public farm; // Address of the Stargate staking contract (LPStaking)
     mapping(address => AssetInfo) public assetInfo;
 
+    event FarmUpdated(address newFarm);
+    event RewarderUpdated(address newRewarder);
+
     // Custom errors
     error InvalidLpToken(address lpToken);
 
@@ -139,32 +142,44 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
         }
     }
 
-    /// @inheritdoc InitializableAbstractStrategy
-    function collectReward() external override nonReentrant {
-        address yieldReceiver = IStrategyVault(vault).yieldReceiver();
-        uint256 numAssets = assetsMapped.length;
-        address[] memory rewardTokens = ILPRewarder_V2(rewarder).rewardTokens();
-
-        for (uint256 i; i < numAssets;) {
-            address asset = assetsMapped[i];
-            address[] memory pTokenAddress = new address[](1);
-            pTokenAddress[0] = _getPTokenFor(asset);
-            ILPStaking_V2(farm).claim(pTokenAddress);
+    /// @notice A function to withdraw from old farm, update farm and deposit in new farm
+    /// @param _newFarm Address of the new farm
+    /// @dev Only callable by owner
+    /// @dev @note Claim the rewards before calling this function!
+    function updateFarm(address _newFarm) external nonReentrant onlyOwner {
+        Helpers._isNonZeroAddr(_newFarm);
+        address _oldFarm = farm;
+        uint256 _numAssets = assetsMapped.length;
+        address _asset;
+        uint256 _lpTokenAmt;
+        address _lpToken;
+        for (uint8 i; i < _numAssets;) {
+            _asset = assetsMapped[i];
+            _lpToken = assetToPToken[_asset];
+            _lpTokenAmt = checkLPTokenBalance(_asset);
+            ILPStaking_V2(_oldFarm).withdraw(_lpToken, _lpTokenAmt);
+            IERC20(_lpToken).forceApprove(_newFarm, _lpTokenAmt);
+            ILPStaking_V2(_newFarm).deposit(_lpToken, _lpTokenAmt);
             unchecked {
                 ++i;
             }
         }
 
-        for (uint256 j; j < rewardTokens.length;) {
-            uint256 rewardEarned = IERC20(rewardTokens[j]).balanceOf(address(this));
-            if (rewardEarned != 0) {
-                uint256 harvestAmt = _splitAndSendReward(rewardTokens[j], yieldReceiver, msg.sender, rewardEarned);
-                emit RewardTokenCollected(rewardTokens[j], yieldReceiver, harvestAmt);
-            }
-            unchecked {
-                ++j;
-            }
-        }
+        farm = _newFarm;
+
+        emit FarmUpdated(_newFarm);
+    }
+
+    /// @notice A function to update the stargate rewarder's address
+    /// @param _newRewarder Address of the new rewarder
+    /// @dev Collects rewards from old rewarder and updates the rewarder
+    function updateRewarder(address _newRewarder) external onlyOwner {
+        Helpers._isNonZeroAddr(_newRewarder);
+        collectReward();
+
+        rewarder = _newRewarder;
+
+        emit RewarderUpdated(_newRewarder);
     }
 
     /// @inheritdoc InitializableAbstractStrategy
@@ -196,6 +211,34 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
             }
         }
         return rewardData;
+    }
+
+    /// @inheritdoc InitializableAbstractStrategy
+    function collectReward() public override nonReentrant {
+        address yieldReceiver = IStrategyVault(vault).yieldReceiver();
+        uint256 numAssets = assetsMapped.length;
+        address[] memory rewardTokens = ILPRewarder_V2(rewarder).rewardTokens();
+
+        for (uint256 i; i < numAssets;) {
+            address asset = assetsMapped[i];
+            address[] memory pTokenAddress = new address[](1);
+            pTokenAddress[0] = _getPTokenFor(asset);
+            ILPStaking_V2(farm).claim(pTokenAddress);
+            unchecked {
+                ++i;
+            }
+        }
+
+        for (uint256 j; j < rewardTokens.length;) {
+            uint256 rewardEarned = IERC20(rewardTokens[j]).balanceOf(address(this));
+            if (rewardEarned != 0) {
+                uint256 harvestAmt = _splitAndSendReward(rewardTokens[j], yieldReceiver, msg.sender, rewardEarned);
+                emit RewardTokenCollected(rewardTokens[j], yieldReceiver, harvestAmt);
+            }
+            unchecked {
+                ++j;
+            }
+        }
     }
 
     /// @inheritdoc InitializableAbstractStrategy
