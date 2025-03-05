@@ -235,7 +235,8 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
     /// @inheritdoc InitializableAbstractStrategy
     function checkAvailableBalance(address _asset) public view override returns (uint256) {
         address pool = assetInfo[_asset].poolAddress;
-        uint256 availableFunds = ILPool_V2(pool).redeemable(address(this));
+        // Passing address(0) returns the max redeemable by any user
+        uint256 availableFunds = ILPool_V2(pool).redeemable(address(0));
         uint256 allocatedAmt = assetInfo[_asset].allocatedAmt;
         if (availableFunds <= allocatedAmt) {
             return availableFunds;
@@ -245,8 +246,8 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
 
     /// @inheritdoc InitializableAbstractStrategy
     function checkLPTokenBalance(address _asset) public view override returns (uint256) {
-        _getPTokenFor(_asset);
-        return ILPStaking_V2(farm).balanceOf(assetToPToken[_asset], address(this));
+        address pToken = _getPTokenFor(_asset);
+        return ILPStaking_V2(farm).balanceOf(pToken, address(this));
     }
 
     /// @inheritdoc InitializableAbstractStrategy
