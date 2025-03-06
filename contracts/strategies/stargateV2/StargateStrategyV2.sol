@@ -290,8 +290,7 @@ contract StargateStrategyV2 is InitializableAbstractStrategy {
 
     /// @inheritdoc InitializableAbstractStrategy
     function checkLPTokenBalance(address _asset) public view override returns (uint256) {
-        address pToken = _getPTokenFor(_asset);
-        return ILPStaking_V2(farm).balanceOf(pToken, address(this));
+        return ILPStaking_V2(farm).balanceOf(_getPTokenFor(_asset), address(this));
     }
 
     /// @inheritdoc InitializableAbstractStrategy
