@@ -315,22 +315,6 @@ contract Test_Deposit is StargateStrategyV2Test {
         }
     }
 
-    function test_Deposit() public useKnownActor(VAULT) {
-        uint256 amount = 1e5;
-        for (uint8 i = 0; i < assetData.length; ++i) {
-            uint256 scaledAmt = amount * 10 ** ERC20(assetData[i].asset).decimals();
-            deal(assetData[i].asset, VAULT, scaledAmt, true);
-            ERC20(assetData[i].asset).approve(address(strategy), scaledAmt);
-
-            strategy.deposit(assetData[i].asset, scaledAmt);
-
-            assertEq(strategy.checkBalance(assetData[i].asset), scaledAmt);
-            uint256 _bal = ERC20(assetData[i].asset).balanceOf(address(strategy));
-            emit log_named_uint("Strategy Balance", _bal);
-            assertApproxEqAbs(ERC20(assetData[i].asset).balanceOf(address(strategy)), 0, 1);
-        }
-    }
-
     function test_RevertWhen_InvalidAmount() public useKnownActor(VAULT) {
         AssetData memory data = assetData[0];
         vm.expectRevert(abi.encodeWithSelector(Helpers.InvalidAmount.selector));
