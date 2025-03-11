@@ -300,16 +300,16 @@ contract Test_Deposit is StargateStrategyV2Test {
     }
 
     function testFuzz_Deposit(uint256 amount) public useKnownActor(VAULT) {
-        amount = uint256(bound(amount, 1, 1e10));
+        amount = uint256(bound(amount, 1, 1e16));
         for (uint8 i = 0; i < assetData.length; ++i) {
-            uint256 scaledAmt = amount * 10 ** ERC20(assetData[i].asset).decimals();
-            deal(assetData[i].asset, VAULT, scaledAmt, true);
-            ERC20(assetData[i].asset).approve(address(strategy), scaledAmt);
+            deal(assetData[i].asset, VAULT, amount, true);
+            ERC20(assetData[i].asset).approve(address(strategy), amount);
 
-            strategy.deposit(assetData[i].asset, scaledAmt);
+            vm.expectEmit(address(strategy));
+            emit Deposit(assetData[i].asset, amount);
+            strategy.deposit(assetData[i].asset, amount);
 
-            assertEq(strategy.checkBalance(assetData[i].asset), scaledAmt);
-            uint256 _bal = ERC20(assetData[i].asset).balanceOf(address(strategy));
+            assertEq(strategy.checkBalance(assetData[i].asset), amount);
             assertApproxEqAbs(ERC20(assetData[i].asset).balanceOf(address(strategy)), 0, 1);
         }
     }
