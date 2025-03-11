@@ -40,11 +40,6 @@ contract StargateStrategyV2Test is BaseStrategy, BaseTest {
     event FarmUpdated(address newFarm);
     event RewarderUpdated(address newRewarder);
 
-    // // Test errors
-    // error IncorrectPoolId(address asset, uint16 pid);
-    // error IncorrectRewardPoolId(address asset, uint256 rewardPid);
-    // error InsufficientRewardFundInFarm();
-
     function setUp() public virtual override {
         super.setUp();
         setArbitrumFork();
@@ -148,6 +143,8 @@ contract Test_Initialization is StargateStrategyV2Test {
         vm.expectEmit(address(strategy));
         emit VaultUpdated(newVault);
         strategy.updateVault(newVault);
+
+        assertEq(strategy.vault(), newVault);
     }
 
     function test_UpdateHarvestIncentiveRate() public useKnownActor(USDS_OWNER) {
@@ -157,6 +154,7 @@ contract Test_Initialization is StargateStrategyV2Test {
         vm.expectEmit(address(strategy));
         emit HarvestIncentiveRateUpdated(newRate);
         strategy.updateHarvestIncentiveRate(newRate);
+        assertEq(strategy.harvestIncentiveRate(), newRate);
 
         newRate = 10001;
         vm.expectRevert(abi.encodeWithSelector(Helpers.GTMaxPercentage.selector, newRate));
@@ -238,7 +236,12 @@ contract Test_RemovePToken is StargateStrategyV2Test {
         vm.expectEmit(address(strategy));
         emit PTokenRemoved(data.asset, data.pool);
         strategy.removePToken(0);
+
         assertFalse(strategy.supportsCollateral(data.asset));
+        assertEq(strategy.assetToPToken(data.asset), address(0));
+        (uint256 allocatedAmt, address poolAddress) = strategy.assetInfo(data.asset);
+        assertEq(allocatedAmt, 0);
+        assertEq(poolAddress, address(0));
     }
 
     function test_RevertWhen_NotOwner() public {
@@ -665,7 +668,7 @@ contract Test_UpdateRewarder is StargateStrategyV2Test {
 
     function test_RevertWhen_CallerIsNotOwner() public {
         vm.expectRevert("Ownable: caller is not the owner");
-        strategy.updateFarm(_newRewarder);
+        strategy.updateRewarder(_newRewarder);
     }
 
     function test_RevertWhen_InvalidAddress() public useKnownActor(USDS_OWNER) {
