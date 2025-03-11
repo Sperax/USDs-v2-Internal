@@ -81,8 +81,7 @@ contract StargateStrategyV2Test is BaseStrategy, BaseTest {
     // Mock Utils:
     function _mockInsufficientRwd(address asset) internal {
         // Do a time travel & mine dummy blocks for accumulating some rewards
-        vm.warp(block.timestamp + 10 days);
-        vm.roll(block.number + 1000);
+        _timeTravel(10 days);
 
         (, uint256[] memory pendingRewards) = strategy.checkPendingRewards(asset);
         assert(pendingRewards[0] > 0);
@@ -91,6 +90,11 @@ contract StargateStrategyV2Test is BaseStrategy, BaseTest {
         changePrank(STARGATE_REWARDER);
         ERC20(E_TOKEN).transfer(actors[0], ERC20(E_TOKEN).balanceOf(STARGATE_REWARDER));
         changePrank(currentActor);
+    }
+
+    function _timeTravel(uint256 time) internal {
+        vm.warp(block.timestamp + (time));
+        vm.roll(block.number + (time / 1 days * BLOCKS_MINED_IN_A_DAY));
     }
 
     function _configAsset() internal {
@@ -363,8 +367,7 @@ contract Test_CollectReward is Test_Harvest {
         strategy.updateHarvestIncentiveRate(_harvestIncentiveRate);
 
         // Do a time travel & mine dummy blocks for accumulating some rewards
-        vm.warp(block.timestamp + 10 days);
-        vm.roll(block.number + 1000);
+        _timeTravel(10 days);
 
         StargateStrategyV2.RewardData[] memory currentRewards = strategy.checkRewardEarned();
         assertTrue(currentRewards[0].amount > 0, "Rewards not accrued");
@@ -523,8 +526,7 @@ contract Test_Withdraw is StargateStrategyV2Test {
         AssetData memory data = assetData[0];
         uint256 initialBal = strategy.checkBalance(data.asset);
 
-        vm.warp(block.timestamp + 10 days);
-        vm.roll(block.number + 1000);
+        _timeTravel(10 days);
 
         uint256 initialAvailableBal = strategy.checkAvailableBalance(data.asset);
 
