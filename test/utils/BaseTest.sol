@@ -7,6 +7,7 @@ abstract contract Setup is Test {
     // Define global constants | Test config
     // @dev Make it 0 to test on latest
     uint256 public constant NUM_ACTORS = 5;
+    uint256 public BLOCKS_MINED_IN_A_DAY = 5760; // ETH
 
     // Define Collateral constants here
     address public constant USDCe = 0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8;
