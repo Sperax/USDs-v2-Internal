@@ -1,0 +1,18 @@
+{
+    "oracle": "0xc64C348DA5c8fd8b31D625749902ADb365e8623a",
+    "token": "0x93b346b6BC2548dA6A1E7d98E9a421B42541425b",
+    "price": 100000000,
+    "price_precision": 100000000,
+    "transactions": [
+        {
+            "step": "Deployment_transaction",
+            "tx_hash": "0x50c9afd7f98785b4eed49295b3d6c62c8287e0c4dad2e4bf63853a91bfc8caa3",
+            "contract": "FixedPriceOracle",
+            "contract_addr": "0xc64C348DA5c8fd8b31D625749902ADb365e8623a",
+            "tx_func": "constructor",
+            "blocknumber": 525333401,
+            "gas_used": 181316,
+            "gas_limit": 203211
+        }
+    ]
+}

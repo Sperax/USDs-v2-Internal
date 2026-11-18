@@ -1,0 +1,46 @@
+{
+  "version": "1.0",
+  "chainId": "42161",
+  "createdAt": 1795008359491,
+  "meta": {
+    "name": "USDs: LUSD fixed price oracle",
+    "description": "Built at block 525333405.\n1. point MasterPriceOracle LUSD feed at FixedPriceOracle 0xc64C348DA5c8fd8b31D625749902ADb365e8623a ($1.00, precision 1e8)",
+    "txBuilderVersion": "1.17.0",
+    "createdFromSafeAddress": "0x5b12d9846F8612E439730d18E1C12634753B1bF1",
+    "createdFromOwnerAddress": "",
+    "checksum": "0xd91e35e5f93fc4579e17b4012d6bee778fa3b4de2243ac0993ab548827d70b83"
+  },
+  "transactions": [
+    {
+      "to": "0x14D99412dAB1878dC01Fe7a1664cdE85896e8E50",
+      "value": "0",
+      "data": null,
+      "contractMethod": {
+        "inputs": [
+          {
+            "internalType": "address",
+            "name": "_token",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "_source",
+            "type": "address"
+          },
+          {
+            "internalType": "bytes",
+            "name": "_data",
+            "type": "bytes"
+          }
+        ],
+        "name": "updateTokenPriceFeed",
+        "payable": false
+      },
+      "contractInputsValues": {
+        "_token": "0x93b346b6BC2548dA6A1E7d98E9a421B42541425b",
+        "_source": "0xc64C348DA5c8fd8b31D625749902ADb365e8623a",
+        "_data": "0xd02641a000000000000000000000000093b346b6bc2548da6a1e7d98e9a421b42541425b"
+      }
+    }
+  ]
+}

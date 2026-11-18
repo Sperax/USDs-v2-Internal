@@ -1,4 +1,4 @@
-from brownie import network, accounts, Contract
+from brownie import network, accounts, Contract, web3
 import click
 import sys
 import time
@@ -108,7 +108,7 @@ def print_dict(msg, data, col=40):
     print("-" * 70)
     s = "{:<" + str(col) + "} -> {:<" + str(col // 2) + "}"
     for k in data.keys():
-        print(s.format(k, data[k]))
+        print(s.format(k, str(data[k])))
     print("-" * 70, "\n")
 
 
@@ -228,9 +228,119 @@ def get_tx_info(name, tx):
     data["step"] = name
     data["tx_hash"] = tx.txid
     data["contract"] = tx.contract_name
-    data["contract_addr"] = tx.contract_address
+    data["contract_addr"] = tx.contract_address or tx.receiver
     data["tx_func"] = tx.fn_name
     data["blocknumber"] = tx.block_number
     data["gas_used"] = tx.gas_used
     data["gas_limit"] = tx.gas_limit
     return data
+
+
+# ---------------------------------------------------------------------------
+# Deployment data
+# ---------------------------------------------------------------------------
+def load_deployment_data():
+    for net in (network.show_active(), 'arbitrum-one'):
+        path = f'deployed/{net}/deployment_data.json'
+        if os.path.exists(path):
+            with open(path) as f:
+                return json.load(f)
+    raise FileNotFoundError('no deployment_data.json found')
+
+
+# ---------------------------------------------------------------------------
+# Safe Transaction Builder batches
+# - Action(target, fn, args, desc): one contract call, serialized with named inputs (no raw calldata).
+# - write_batch(...): checksum matches safe-react-apps/apps/tx-builder/src/lib/checksum.ts,
+#   so the Safe UI imports the file without complaint.
+# ---------------------------------------------------------------------------
+TX_BUILDER_VERSION = '1.17.0'
+
+
+class Action:
+    def __init__(self, target, fn, args, desc):
+        self.target = target
+        self.fn = fn
+        self.args = args
+        self.desc = desc
+
+    def __str__(self):
+        return f'{self.target._name}.{self.fn}  --  {self.desc}'
+
+
+def _abi_inputs(contract, fn, nargs):
+    for e in contract.abi:
+        if e.get('type') == 'function' and e['name'] == fn and len(e['inputs']) == nargs:
+            return e['inputs']
+    raise KeyError(f'{contract._name}.{fn} with {nargs} inputs not in ABI')
+
+
+def _builder_value(v):
+    if hasattr(v, 'address'):
+        return v.address
+    if isinstance(v, str) and v.startswith('0x') and len(v) == 42:
+        return web3.to_checksum_address(v)
+    if isinstance(v, (bytes, bytearray)):
+        return web3.to_hex(v)
+    return str(v)
+
+
+def builder_tx(action):
+    inputs = _abi_inputs(action.target, action.fn, len(action.args))
+    return {
+        'to': action.target.address,
+        'value': '0',
+        'data': None,
+        'contractMethod': {
+            'inputs': [{'internalType': i['internalType'], 'name': i['name'], 'type': i['type']} for i in inputs],
+            'name': action.fn,
+            'payable': False,
+        },
+        'contractInputsValues': {i['name']: _builder_value(arg) for i, arg in zip(inputs, action.args)},
+    }
+
+
+def _js_json(v):
+    return json.dumps(v, separators=(',', ':'), ensure_ascii=False)
+
+
+def _serialize(obj):
+    # Mirrors serializeJSONObject in checksum.ts
+    if isinstance(obj, list):
+        return '[' + ','.join(_serialize(e) for e in obj) + ']'
+    if isinstance(obj, dict):
+        keys = sorted(obj.keys())
+        acc = '{' + _js_json(keys)
+        for k in keys:
+            acc += _serialize(obj[k]) + ','
+        return acc + '}'
+    return _js_json(obj)
+
+
+def checksum(batch):
+    b = dict(batch)
+    b['meta'] = {k: v for k, v in batch['meta'].items() if k != 'checksum'}
+    b['meta']['name'] = None
+    return web3.to_hex(web3.keccak(text=_serialize(b)))
+
+
+def write_batch(name, actions, path, safe, chain_id, header=''):
+    desc = ([header] if header else []) + [f'{i}. {a.desc}' for i, a in enumerate(actions, 1)]
+    batch = {
+        'version': '1.0',
+        'chainId': str(chain_id),
+        'createdAt': int(time.time() * 1000),
+        'meta': {
+            'name': name,
+            'description': '\n'.join(desc),
+            'txBuilderVersion': TX_BUILDER_VERSION,
+            'createdFromSafeAddress': safe,
+            'createdFromOwnerAddress': '',
+        },
+        'transactions': [builder_tx(a) for a in actions],
+    }
+    batch['meta']['checksum'] = checksum(batch)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, 'w') as f:
+        json.dump(batch, f, indent=2)
+    return batch

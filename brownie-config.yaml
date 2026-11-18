@@ -18,3 +18,10 @@ compiler:
           - "@chainlink/contracts=node_modules/@chainlink/contracts"
           - "@uniswap/v3-core/contracts=node_modules/@uniswap/v3-core/contracts"
           - "@uniswap/v3-periphery/contracts=node_modules/@uniswap/v3-periphery/contracts"
+
+networks:
+  development:
+    # forked anvil blocks carry a real base fee, brownie's default gas_price 0 is rejected
+    gas_price: auto
+    # Arbitrum block gas limit is ~1.1e15, brownie's default gas_limit max makes gas*price exceed any balance
+    gas_limit: auto
