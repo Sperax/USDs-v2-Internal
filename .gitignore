@@ -24,3 +24,5 @@ lcov.info
 #  mutation testing
 gambit_out
 testLogs
+deployed/anvil
+deployed/arbitrum-main-fork-anvil
